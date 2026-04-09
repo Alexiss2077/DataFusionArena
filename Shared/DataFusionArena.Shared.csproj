@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>DataFusionArena.Shared</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- PostgreSQL -->
+    <PackageReference Include="Npgsql" Version="9.0.2" />
+    <!-- MariaDB / MySQL -->
+    <PackageReference Include="MySqlConnector" Version="2.3.7" />
+  </ItemGroup>
+
+</Project>
