@@ -1,4 +1,3 @@
-using System.Windows.Forms.DataVisualization.Charting;
 using DataFusionArena.Shared.Models;
 using DataFusionArena.Shared.Readers;
 using DataFusionArena.Shared.Database;
@@ -9,45 +8,53 @@ namespace DataFusionArena.WinForms;
 public partial class MainForm : Form
 {
     // ── Estado global ────────────────────────────────────────────
-    private readonly List<DataItem> _datos       = new();
-    private List<DataItem>          _datosVista  = new();  // lista filtrada/ordenada actual
+    private readonly List<DataItem> _datos = new();
+    private List<DataItem> _datosVista = new();
     private Dictionary<string, List<DataItem>> _porCategoria = new();
-    private Dictionary<int, DataItem>          _porId        = new();
+    private Dictionary<int, DataItem> _porId = new();
 
     private readonly string _dirDatos = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory, "SampleData");
 
+    // ════════════════════════════════════════════════════════════
+    //  CONSTRUCTOR
+    // ════════════════════════════════════════════════════════════
     public MainForm()
     {
         InitializeComponent();
         ConfigurarDataGridViews();
-        ConfigurarChart();
         ActualizarEstadoBarra("Listo. Cargue datos usando el menú o los botones.");
         Text = "Data Fusion Arena – Administración y Organización de Datos";
+
+        // SplitterDistance se aplica después de que el form tenga tamaño real
+        Load += (s, e) =>
+        {
+            splitMain.SplitterDistance = 170;
+            splitCategoria.SplitterDistance = 220;
+        };
+
+        // Gráfica sólo se dibuja cuando se selecciona la pestaña
+        tabControl1.SelectedIndexChanged += (s, e) =>
+        {
+            if (tabControl1.SelectedTab == tabGraficas)
+                pnlChart.Invalidate();
+        };
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  TOOLBAR / MENÚ – Carga de archivos
-    // ══════════════════════════════════════════════════════════════
-
-    private void BtnCargarJson_Click(object sender, EventArgs e)
-        => CargarArchivo(Path.Combine(_dirDatos, "products.json"), "json");
-
-    private void BtnCargarCsv_Click(object sender, EventArgs e)
-        => CargarArchivo(Path.Combine(_dirDatos, "sales.csv"), "csv");
-
-    private void BtnCargarXml_Click(object sender, EventArgs e)
-        => CargarArchivo(Path.Combine(_dirDatos, "employees.xml"), "xml");
-
-    private void BtnCargarTxt_Click(object sender, EventArgs e)
-        => CargarArchivo(Path.Combine(_dirDatos, "records.txt"), "txt");
+    // ════════════════════════════════════════════════════════════
+    //  CARGA DE ARCHIVOS
+    // ════════════════════════════════════════════════════════════
+    private void BtnCargarJson_Click(object sender, EventArgs e) => CargarArchivo(Path.Combine(_dirDatos, "products.json"), "json");
+    private void BtnCargarCsv_Click(object sender, EventArgs e) => CargarArchivo(Path.Combine(_dirDatos, "sales.csv"), "csv");
+    private void BtnCargarXml_Click(object sender, EventArgs e) => CargarArchivo(Path.Combine(_dirDatos, "employees.xml"), "xml");
+    private void BtnCargarTxt_Click(object sender, EventArgs e) => CargarArchivo(Path.Combine(_dirDatos, "records.txt"), "txt");
 
     private void BtnCargarTodo_Click(object sender, EventArgs e)
     {
-        CargarArchivo(Path.Combine(_dirDatos, "products.json"),  "json",  silencioso: true);
-        CargarArchivo(Path.Combine(_dirDatos, "sales.csv"),      "csv",   silencioso: true);
-        CargarArchivo(Path.Combine(_dirDatos, "employees.xml"),  "xml",   silencioso: true);
-        CargarArchivo(Path.Combine(_dirDatos, "records.txt"),    "txt",   silencioso: true);
+        CargarArchivo(Path.Combine(_dirDatos, "products.json"), "json", silencioso: true);
+        CargarArchivo(Path.Combine(_dirDatos, "sales.csv"), "csv", silencioso: true);
+        CargarArchivo(Path.Combine(_dirDatos, "employees.xml"), "xml", silencioso: true);
+        CargarArchivo(Path.Combine(_dirDatos, "records.txt"), "txt", silencioso: true);
         ActualizarTodo();
         ActualizarEstadoBarra($"✅ Todos los archivos cargados. Total: {_datos.Count} registros.");
         MessageBox.Show($"Archivos cargados exitosamente.\nTotal de registros: {_datos.Count}",
@@ -58,7 +65,7 @@ public partial class MainForm : Form
     {
         using var dlg = new OpenFileDialog
         {
-            Title  = "Selecciona un archivo de datos",
+            Title = "Selecciona un archivo de datos",
             Filter = "Archivos soportados|*.json;*.csv;*.xml;*.txt|JSON|*.json|CSV|*.csv|XML|*.xml|TXT|*.txt"
         };
         if (dlg.ShowDialog() == DialogResult.OK)
@@ -78,30 +85,22 @@ public partial class MainForm : Form
         List<DataItem> nuevos;
         switch (tipo)
         {
-            case "json":
-                nuevos = JsonDataReader.Leer(ruta);
-                break;
-            case "csv":
-                nuevos = CsvDataReader.Leer(ruta);
-                break;
+            case "json": nuevos = JsonDataReader.Leer(ruta); break;
+            case "csv": nuevos = CsvDataReader.Leer(ruta); break;
             case "xml":
                 nuevos = XmlDataReader.Leer(ruta);
-                // Normalizar campos XML de empleados
                 foreach (var item in nuevos)
                 {
                     if (item.CamposExtra.TryGetValue("departamento", out var dep))
                     { item.Categoria = dep; item.CamposExtra.Remove("departamento"); }
                     if (item.CamposExtra.TryGetValue("salario", out var sal) &&
                         double.TryParse(sal, System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture, out double s))
-                    { item.Valor = s; item.CamposExtra.Remove("salario"); }
+                        System.Globalization.CultureInfo.InvariantCulture, out double sv))
+                    { item.Valor = sv; item.CamposExtra.Remove("salario"); }
                 }
                 break;
-            case "txt":
-                nuevos = TxtDataReader.Leer(ruta);
-                break;
-            default:
-                return;
+            case "txt": nuevos = TxtDataReader.Leer(ruta); break;
+            default: return;
         }
 
         DataProcessor.AgregarDatos(_datos, nuevos);
@@ -111,29 +110,26 @@ public partial class MainForm : Form
             ActualizarEstadoBarra($"✅ {nuevos.Count} registros cargados desde {Path.GetFileName(ruta)}. Total: {_datos.Count}");
     }
 
-    // ══════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════
     //  BASES DE DATOS
-    // ══════════════════════════════════════════════════════════════
-
+    // ════════════════════════════════════════════════════════════
     private void BtnConectarPostgres_Click(object sender, EventArgs e)
     {
         using var dlg = new FormConexionBD("PostgreSQL");
         if (dlg.ShowDialog() != DialogResult.OK) return;
-
         var pg = new PostgreSqlConnector(dlg.CadenaConexion, dlg.NombreTabla);
         ActualizarEstadoBarra("Conectando a PostgreSQL...");
-
         if (pg.ProbarConexion(out string msg))
         {
             var datos = pg.LeerDatos();
             DataProcessor.AgregarDatos(_datos, datos);
             ActualizarTodo();
-            ActualizarEstadoBarra($"✅ PostgreSQL: {datos.Count} registros cargados. {msg}");
+            ActualizarEstadoBarra($"✅ PostgreSQL: {datos.Count} registros. {msg}");
         }
         else
         {
-            MessageBox.Show($"Error de conexión:\n{msg}", "PostgreSQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            ActualizarEstadoBarra($"❌ Error PostgreSQL: {msg}");
+            MessageBox.Show($"Error:\n{msg}", "PostgreSQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            ActualizarEstadoBarra($"❌ {msg}");
         }
     }
 
@@ -141,37 +137,32 @@ public partial class MainForm : Form
     {
         using var dlg = new FormConexionBD("MariaDB");
         if (dlg.ShowDialog() != DialogResult.OK) return;
-
         var md = new MariaDbConnector(dlg.CadenaConexion, dlg.NombreTabla);
         ActualizarEstadoBarra("Conectando a MariaDB...");
-
         if (md.ProbarConexion(out string msg))
         {
             var datos = md.LeerDatos();
             DataProcessor.AgregarDatos(_datos, datos);
             ActualizarTodo();
-            ActualizarEstadoBarra($"✅ MariaDB: {datos.Count} registros cargados. {msg}");
+            ActualizarEstadoBarra($"✅ MariaDB: {datos.Count} registros. {msg}");
         }
         else
         {
-            MessageBox.Show($"Error de conexión:\n{msg}", "MariaDB", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            ActualizarEstadoBarra($"❌ Error MariaDB: {msg}");
+            MessageBox.Show($"Error:\n{msg}", "MariaDB", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            ActualizarEstadoBarra($"❌ {msg}");
         }
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  TAB 1 – TODOS LOS DATOS (DataGridView principal)
-    // ══════════════════════════════════════════════════════════════
-
+    // ════════════════════════════════════════════════════════════
+    //  TAB 1 – TODOS LOS DATOS
+    // ════════════════════════════════════════════════════════════
     private void BtnFiltrar_Click(object sender, EventArgs e)
     {
         string campo = cmbCampoBusqueda.Text.ToLower();
         string valor = txtBusqueda.Text.Trim();
-
         _datosVista = string.IsNullOrEmpty(valor)
             ? new List<DataItem>(_datos)
             : DataProcessor.Filtrar(_datos, campo, valor);
-
         BindGridTodos(_datosVista);
         ActualizarEstadoBarra($"Filtro '{campo}' = '{valor}' → {_datosVista.Count} resultados.");
     }
@@ -181,132 +172,250 @@ public partial class MainForm : Form
         txtBusqueda.Text = "";
         _datosVista = new List<DataItem>(_datos);
         BindGridTodos(_datosVista);
-        ActualizarEstadoBarra($"Filtro limpiado. Mostrando {_datos.Count} registros.");
+        ActualizarEstadoBarra($"Filtro limpiado. {_datos.Count} registros.");
     }
 
     private void BtnOrdenar_Click(object sender, EventArgs e)
     {
         string campo = cmbCampoOrden.Text.ToLower();
-        bool asc     = rbAscendente.Checked;
-        var fuente   = _datosVista.Count > 0 ? _datosVista : _datos;
+        bool asc = rbAscendente.Checked;
+        var fuente = _datosVista.Count > 0 ? _datosVista : _datos;
         var ordenado = DataProcessor.Ordenar(fuente, campo, asc);
         BindGridTodos(ordenado);
-        ActualizarEstadoBarra($"Ordenado por '{campo}' {(asc ? "↑ asc" : "↓ desc")}. {ordenado.Count} registros.");
+        ActualizarEstadoBarra($"Ordenado por '{campo}' {(asc ? "↑" : "↓")}. {ordenado.Count} registros.");
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  TAB 2 – POR CATEGORÍA (Dictionary)
-    // ══════════════════════════════════════════════════════════════
-
+    // ════════════════════════════════════════════════════════════
+    //  TAB 2 – POR CATEGORÍA
+    // ════════════════════════════════════════════════════════════
     private void LstCategorias_SelectedIndexChanged(object sender, EventArgs e)
     {
         if (lstCategorias.SelectedItem is not string cat) return;
         if (!_porCategoria.TryGetValue(cat, out var lista)) return;
-
         BindGridCategoria(lista);
-        lblCatInfo.Text = $"Categoría: {cat}  |  {lista.Count} registros  |  " +
-                          $"Promedio: {lista.Average(x => x.Valor):F2}  |  " +
+        lblCatInfo.Text = $"  {cat}   |   {lista.Count} registros   |   " +
+                          $"Promedio: {lista.Average(x => x.Valor):F2}   |   " +
                           $"Total: {lista.Sum(x => x.Valor):N2}";
     }
 
-    // ══════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════
     //  TAB 3 – ESTADÍSTICAS
-    // ══════════════════════════════════════════════════════════════
-
+    // ════════════════════════════════════════════════════════════
     private void ActualizarTabEstadisticas()
     {
         if (_datos.Count == 0) return;
         var stats = DataProcessor.CalcularEstadisticas(_datos);
-
         dgvEstadisticas.Rows.Clear();
         foreach (var s in stats.Values.OrderByDescending(x => x.SumaValores))
-        {
-            dgvEstadisticas.Rows.Add(
-                s.Categoria, s.Cantidad,
-                s.Promedio.ToString("F2"),
-                s.ValorMaximo.ToString("F2"),
-                s.ValorMinimo.ToString("F2"),
-                s.SumaValores.ToString("N2")
-            );
-        }
+            dgvEstadisticas.Rows.Add(s.Categoria, s.Cantidad,
+                s.Promedio.ToString("F2"), s.ValorMaximo.ToString("F2"),
+                s.ValorMinimo.ToString("F2"), s.SumaValores.ToString("N2"));
 
-        // Totales
-        lblTotalRegistros.Text  = $"Total registros: {_datos.Count}";
+        lblTotalRegistros.Text = $"Total registros: {_datos.Count}";
         lblTotalCategorias.Text = $"Categorías: {_porCategoria.Count}";
-        lblTotalFuentes.Text    = $"Fuentes: {_datos.Select(d => d.Fuente).Distinct().Count()}";
+        lblTotalFuentes.Text = $"Fuentes: {_datos.Select(d => d.Fuente).Distinct().Count()}";
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  TAB 4 – GRÁFICAS (Chart)
-    // ══════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════
+    //  TAB 4 – GRÁFICAS (GDI+ puro)
+    // ════════════════════════════════════════════════════════════
+    private void BtnActualizarGrafica_Click(object sender, EventArgs e) => pnlChart.Invalidate();
+    private void CmbTipoGrafica_SelectedIndexChanged(object sender, EventArgs e) => pnlChart.Invalidate();
+    private void ActualizarGrafica() => pnlChart.Invalidate();
 
-    private void BtnActualizarGrafica_Click(object sender, EventArgs e)
-        => ActualizarGrafica();
-
-    private void CmbTipoGrafica_SelectedIndexChanged(object sender, EventArgs e)
-        => ActualizarGrafica();
-
-    private void ActualizarGrafica()
+    private void PnlChart_Paint(object sender, PaintEventArgs e)
     {
         if (_datos.Count == 0)
         {
-            MessageBox.Show("No hay datos. Cargue archivos primero.", "Sin datos",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            using var fnt = new Font("Segoe UI", 13f);
+            e.Graphics.DrawString("Sin datos. Cargue archivos primero.", fnt,
+                Brushes.Gray, 40, 40);
             return;
         }
 
-        chart1.Series.Clear();
-        chart1.Titles.Clear();
-        chart1.Titles.Add("Data Fusion Arena – Análisis de Datos");
+        var g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-        var stats = DataProcessor.CalcularEstadisticas(_datos);
+        var stats = DataProcessor.CalcularEstadisticas(_datos)
+                                 .Values
+                                 .OrderByDescending(x => x.SumaValores)
+                                 .ToList();
+
+        if (stats.Count == 0) return;
+
         string tipo = cmbTipoGrafica.Text;
+        int W = pnlChart.Width;
+        int H = pnlChart.Height;
 
-        var series = new Series("Datos")
-        {
-            ChartType = tipo switch
-            {
-                "Barras"   => SeriesChartType.Bar,
-                "Columnas" => SeriesChartType.Column,
-                "Pastel"   => SeriesChartType.Pie,
-                "Línea"    => SeriesChartType.Line,
-                _          => SeriesChartType.Column
-            },
-            IsValueShownAsLabel = true,
-            LabelFormat         = "#,##0"
-        };
-
-        // Agrupar por categoría: suma de valores
-        foreach (var s in stats.Values.OrderByDescending(x => x.SumaValores))
-        {
-            int idx = series.Points.AddXY(s.Categoria, s.SumaValores);
-            // Color diferente por categoría
-            series.Points[idx].Color = ColorPorIndice(idx);
-        }
-
-        chart1.Series.Add(series);
-        chart1.ChartAreas[0].AxisX.LabelStyle.Angle = -35;
-        chart1.ChartAreas[0].AxisY.LabelStyle.Format = "#,##0";
-        chart1.ChartAreas[0].BackColor = Color.FromArgb(30, 30, 30);
-        chart1.BackColor = Color.FromArgb(22, 22, 35);
-
-        ActualizarEstadoBarra($"Gráfica '{tipo}' actualizada con {stats.Count} categorías.");
+        if (tipo == "Pastel")
+            DibujarPastel(g, stats, W, H);
+        else
+            DibujarBarras(g, stats, W, H, tipo == "Barras");
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  TAB 5 – PROCESAMIENTO (duplicados, LINQ)
-    // ══════════════════════════════════════════════════════════════
+    private void DibujarBarras(Graphics g, List<EstadisticasCategoria> stats, int W, int H, bool horizontal)
+    {
+        int mIzq = horizontal ? 165 : 55;
+        int mDer = 30;
+        int mTop = 45;
+        int mBot = horizontal ? 25 : 75;
 
+        int aW = W - mIzq - mDer;
+        int aH = H - mTop - mBot;
+        if (aW <= 0 || aH <= 0) return;
+
+        double maxVal = stats.Max(s => s.SumaValores);
+        if (maxVal <= 0) return;
+
+        // Fondo área
+        g.FillRectangle(new SolidBrush(Color.FromArgb(28, 28, 45)), mIzq, mTop, aW, aH);
+
+        // Título
+        using var fntT = new Font("Segoe UI", 12f, FontStyle.Bold);
+        g.DrawString("Valor total por categoría", fntT, new SolidBrush(Color.FromArgb(230, 230, 240)), mIzq, 8);
+
+        var colores = PaletaColores();
+        using var fntL = new Font("Segoe UI", 8f);
+        using var fntV = new Font("Segoe UI", 8f, FontStyle.Bold);
+        int n = stats.Count;
+
+        if (!horizontal)
+        {
+            // Líneas guía horizontales
+            using var penGuia = new Pen(Color.FromArgb(50, 50, 70));
+            for (int gi = 1; gi <= 4; gi++)
+            {
+                int gy = mTop + aH - (int)(aH * gi / 4.0);
+                g.DrawLine(penGuia, mIzq, gy, mIzq + aW, gy);
+                double gVal = maxVal * gi / 4.0;
+                string gStr = gVal >= 1_000_000 ? $"{gVal / 1_000_000:F1}M"
+                            : gVal >= 1_000 ? $"{gVal / 1_000:F0}K"
+                            : $"{gVal:F0}";
+                g.DrawString(gStr, fntL, Brushes.DimGray, mIzq - 50, gy - 7);
+            }
+
+            int slot = aW / Math.Max(n, 1);
+            int barW = Math.Max(10, slot - 16);
+
+            for (int i = 0; i < n; i++)
+            {
+                var s = stats[i];
+                int barH = (int)(s.SumaValores / maxVal * aH);
+                int x = mIzq + i * slot + (slot - barW) / 2;
+                int y = mTop + aH - barH;
+
+                using var br = new SolidBrush(colores[i % colores.Length]);
+                g.FillRectangle(br, x, y, barW, barH);
+
+                // Valor
+                string val = FormatVal(s.SumaValores);
+                var vs = g.MeasureString(val, fntV);
+                g.DrawString(val, fntV, Brushes.White, x + (barW - vs.Width) / 2, Math.Max(mTop, y - vs.Height - 2));
+
+                // Etiqueta
+                string lbl = s.Categoria.Length > 13 ? s.Categoria[..13] + "…" : s.Categoria;
+                g.TranslateTransform(x + barW / 2f, mTop + aH + 5);
+                g.RotateTransform(38);
+                g.DrawString(lbl, fntL, Brushes.LightGray, 0, 0);
+                g.ResetTransform();
+            }
+        }
+        else
+        {
+            // Líneas guía verticales
+            using var penGuia = new Pen(Color.FromArgb(50, 50, 70));
+            for (int gi = 1; gi <= 4; gi++)
+            {
+                int gx = mIzq + (int)(aW * gi / 4.0);
+                g.DrawLine(penGuia, gx, mTop, gx, mTop + aH);
+            }
+
+            int slot = aH / Math.Max(n, 1);
+            int barH = Math.Max(8, slot - 10);
+
+            for (int i = 0; i < n; i++)
+            {
+                var s = stats[i];
+                int barW = (int)(s.SumaValores / maxVal * aW);
+                int y = mTop + i * slot + (slot - barH) / 2;
+
+                using var br = new SolidBrush(colores[i % colores.Length]);
+                g.FillRectangle(br, mIzq, y, barW, barH);
+
+                string lbl = s.Categoria.Length > 20 ? s.Categoria[..20] + "…" : s.Categoria;
+                g.DrawString(lbl, fntL, Brushes.LightGray, 2, y + (barH - 14) / 2);
+
+                string val = FormatVal(s.SumaValores);
+                g.DrawString(val, fntV, Brushes.White, mIzq + barW + 4, y + (barH - 14) / 2);
+            }
+        }
+    }
+
+    private void DibujarPastel(Graphics g, List<EstadisticasCategoria> stats, int W, int H)
+    {
+        double total = stats.Sum(s => s.SumaValores);
+        if (total <= 0) return;
+
+        int size = Math.Min(W - 280, H - 80);
+        size = Math.Max(size, 100);
+        int x0 = 30;
+        int y0 = (H - size) / 2;
+
+        using var fntT = new Font("Segoe UI", 12f, FontStyle.Bold);
+        g.DrawString("Distribución por categoría", fntT,
+            new SolidBrush(Color.FromArgb(230, 230, 240)), x0, 8);
+
+        var colores = PaletaColores();
+        float start = -90f;
+        using var fntL = new Font("Segoe UI", 8.5f);
+
+        for (int i = 0; i < stats.Count; i++)
+        {
+            float sweep = (float)(stats[i].SumaValores / total * 360.0);
+            using var br = new SolidBrush(colores[i % colores.Length]);
+            g.FillPie(br, x0, y0, size, size, start, sweep);
+            g.DrawPie(Pens.Black, x0, y0, size, size, start, sweep);
+
+            // Leyenda
+            int lx = x0 + size + 25;
+            int ly = y0 + i * 24;
+            if (ly + 16 > H) break;
+            g.FillRectangle(br, lx, ly + 4, 14, 14);
+            string pct = $"{stats[i].SumaValores / total:P1}";
+            string lbl = stats[i].Categoria.Length > 20
+                ? stats[i].Categoria[..20] + "…" : stats[i].Categoria;
+            g.DrawString($"{lbl}  {pct}", fntL, Brushes.LightGray, lx + 18, ly);
+
+            start += sweep;
+        }
+    }
+
+    private static string FormatVal(double v)
+        => v >= 1_000_000 ? $"{v / 1_000_000:F1}M"
+         : v >= 1_000 ? $"{v / 1_000:F1}K"
+         : $"{v:F0}";
+
+    private static Color[] PaletaColores() => new[]
+    {
+        Color.FromArgb(0,  200, 255), Color.FromArgb(255, 200,  0),
+        Color.FromArgb(0,  255, 128), Color.FromArgb(255,  80, 100),
+        Color.FromArgb(180,100, 255), Color.FromArgb(255, 150,  50),
+        Color.FromArgb(0,  220, 200), Color.FromArgb(220,  80, 220),
+        Color.FromArgb(80, 200,  80), Color.FromArgb(100, 160, 255)
+    };
+
+    // ════════════════════════════════════════════════════════════
+    //  TAB 5 – PROCESAMIENTO
+    // ════════════════════════════════════════════════════════════
     private void BtnDetectarDuplicados_Click(object sender, EventArgs e)
     {
         var dupes = DataProcessor.DetectarDuplicados(_datos);
         BindGridProcesamiento(dupes);
-
         if (dupes.Count == 0)
             lblProcInfo.Text = "✅ No se encontraron duplicados.";
         else
         {
-            lblProcInfo.Text = $"⚠ Se encontraron {dupes.Count} duplicados.";
+            lblProcInfo.Text = $"⚠ {dupes.Count} duplicados encontrados.";
             btnEliminarDuplicados.Enabled = true;
         }
         ActualizarEstadoBarra($"Duplicados detectados: {dupes.Count}");
@@ -314,23 +423,21 @@ public partial class MainForm : Form
 
     private void BtnEliminarDuplicados_Click(object sender, EventArgs e)
     {
-        if (MessageBox.Show($"¿Eliminar duplicados? Esta acción no se puede deshacer.",
+        if (MessageBox.Show("¿Eliminar duplicados? Esta acción no se puede deshacer.",
             "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-
         int antes = _datos.Count;
         var limpia = DataProcessor.EliminarDuplicados(_datos);
-        _datos.Clear();
-        _datos.AddRange(limpia);
+        _datos.Clear(); _datos.AddRange(limpia);
         ActualizarTodo();
-        lblProcInfo.Text = $"✅ Eliminados {antes - _datos.Count} duplicados. Quedan {_datos.Count} registros.";
+        lblProcInfo.Text = $"✅ Eliminados {antes - _datos.Count} duplicados. Quedan {_datos.Count}.";
         btnEliminarDuplicados.Enabled = false;
-        ActualizarEstadoBarra($"Duplicados eliminados. Registros actuales: {_datos.Count}");
+        ActualizarEstadoBarra($"Registros actuales: {_datos.Count}");
     }
 
     private void BtnLinqWhere_Click(object sender, EventArgs e)
     {
         string cat = txtLinqFiltro.Text.Trim();
-        var res     = DataProcessor.FiltrarLinq(_datos, cat).ToList();
+        var res = DataProcessor.FiltrarLinq(_datos, cat).ToList();
         BindGridProcesamiento(res);
         lblProcInfo.Text = $"LINQ .Where() → {res.Count} resultados para '{cat}'";
     }
@@ -338,22 +445,17 @@ public partial class MainForm : Form
     private void BtnLinqGroupBy_Click(object sender, EventArgs e)
     {
         var grupos = DataProcessor.AgruparLinq(_datos);
-        // Mostrar resumen en grid
         dgvProcesamiento.Rows.Clear();
-        // Temporalmente usar columnas distintas
         foreach (var g in grupos.OrderByDescending(g => g.Count()))
-        {
-            var item = new DataItem
+            AgregarFilaGrid(dgvProcesamiento, new DataItem
             {
-                Id        = g.Count(),
-                Nombre    = g.Key,
+                Id = g.Count(),
+                Nombre = g.Key,
                 Categoria = $"{g.Count()} items",
-                Valor     = g.Average(x => x.Valor),
-                Fuente    = "LINQ GroupBy",
-                Fecha     = DateTime.Now
-            };
-            AgregarFilaGrid(dgvProcesamiento, item);
-        }
+                Valor = g.Average(x => x.Valor),
+                Fuente = "LINQ GroupBy",
+                Fecha = DateTime.Now
+            });
         lblProcInfo.Text = $"LINQ .GroupBy() → {grupos.Count()} grupos";
     }
 
@@ -364,25 +466,23 @@ public partial class MainForm : Form
         lblProcInfo.Text = $"LINQ .OrderByDescending(Valor) → {ordenado.Count} registros";
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  HELPERS DE ACTUALIZACIÓN GLOBAL
-    // ══════════════════════════════════════════════════════════════
-
+    // ════════════════════════════════════════════════════════════
+    //  ACTUALIZACIÓN GLOBAL
+    // ════════════════════════════════════════════════════════════
     private void ActualizarTodo()
     {
         _porCategoria = DataProcessor.AgruparPorCategoria(_datos);
-        _porId        = DataProcessor.IndexarPorId(_datos);
-        _datosVista   = new List<DataItem>(_datos);
+        _porId = DataProcessor.IndexarPorId(_datos);
+        _datosVista = new List<DataItem>(_datos);
 
         BindGridTodos(_datos);
         ActualizarListaCategorias();
         ActualizarTabEstadisticas();
-        ActualizarGrafica();
         ActualizarFuentesCheckedList();
 
-        lblTotalRegistros.Text  = $"Total registros: {_datos.Count}";
+        lblTotalRegistros.Text = $"Total registros: {_datos.Count}";
         lblTotalCategorias.Text = $"Categorías: {_porCategoria.Count}";
-        lblTotalFuentes.Text    = $"Fuentes: {_datos.Select(d => d.Fuente).Distinct().Count()}";
+        lblTotalFuentes.Text = $"Fuentes: {_datos.Select(d => d.Fuente).Distinct().Count()}";
     }
 
     private void ActualizarListaCategorias()
@@ -395,187 +495,170 @@ public partial class MainForm : Form
     private void ActualizarFuentesCheckedList()
     {
         clbFuentes.Items.Clear();
-        var fuentes = _datos.Select(d => d.Fuente).Distinct().OrderBy(f => f);
-        foreach (var f in fuentes)
+        foreach (var f in _datos.Select(d => d.Fuente).Distinct().OrderBy(f => f))
             clbFuentes.Items.Add(f, true);
     }
 
     private void ClbFuentes_ItemCheck(object sender, ItemCheckEventArgs e)
     {
-        // Filtrar por fuentes seleccionadas
         BeginInvoke(() =>
         {
-            var seleccionadas = clbFuentes.CheckedItems.Cast<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var sel = clbFuentes.CheckedItems.Cast<string>()
+                                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (e.NewValue == CheckState.Checked)
-                seleccionadas.Add(clbFuentes.Items[e.Index].ToString()!);
+                sel.Add(clbFuentes.Items[e.Index].ToString()!);
             else
-                seleccionadas.Remove(clbFuentes.Items[e.Index].ToString()!);
+                sel.Remove(clbFuentes.Items[e.Index].ToString()!);
 
-            var filtrado = _datos.Where(d => seleccionadas.Contains(d.Fuente)).ToList();
+            var filtrado = _datos.Where(d => sel.Contains(d.Fuente)).ToList();
             BindGridTodos(filtrado);
-            ActualizarEstadoBarra($"Mostrando {filtrado.Count} registros de fuentes: {string.Join(", ", seleccionadas)}");
+            ActualizarEstadoBarra($"Mostrando {filtrado.Count} registros de: {string.Join(", ", sel)}");
         });
     }
 
-    // ══════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════
     //  BINDING DE GRIDS
-    // ══════════════════════════════════════════════════════════════
-
+    // ════════════════════════════════════════════════════════════
     private void BindGridTodos(List<DataItem> lista)
     {
         dgvTodos.Rows.Clear();
-        foreach (var item in lista)
-            AgregarFilaGrid(dgvTodos, item);
+        foreach (var item in lista) AgregarFilaGrid(dgvTodos, item);
         lblContadorTodos.Text = $"{lista.Count} registros";
     }
 
     private void BindGridCategoria(List<DataItem> lista)
     {
         dgvCategoria.Rows.Clear();
-        foreach (var item in lista)
-            AgregarFilaGrid(dgvCategoria, item);
+        foreach (var item in lista) AgregarFilaGrid(dgvCategoria, item);
     }
 
     private void BindGridProcesamiento(List<DataItem> lista)
     {
         dgvProcesamiento.Rows.Clear();
-        foreach (var item in lista)
-            AgregarFilaGrid(dgvProcesamiento, item);
+        foreach (var item in lista) AgregarFilaGrid(dgvProcesamiento, item);
     }
 
     private static void AgregarFilaGrid(DataGridView dgv, DataItem item)
     {
         int idx = dgv.Rows.Add(
             item.Id, item.Nombre, item.Categoria,
-            item.Valor.ToString("F2"), item.Fecha.ToString("yyyy-MM-dd"), item.Fuente
-        );
+            item.Valor.ToString("F2"), item.Fecha.ToString("yyyy-MM-dd"), item.Fuente);
 
-        // Colorear fila según fuente
         dgv.Rows[idx].DefaultCellStyle.BackColor = item.Fuente switch
         {
-            "json"       => Color.FromArgb(20, 60, 20),
-            "csv"        => Color.FromArgb(60, 50, 10),
-            "xml"        => Color.FromArgb(10, 40, 70),
-            "txt"        => Color.FromArgb(50, 20, 60),
-            "postgresql" => Color.FromArgb(10, 30, 80),
-            "mariadb"    => Color.FromArgb(60, 30, 10),
-            _            => Color.FromArgb(40, 40, 40)
+            "json" => Color.FromArgb(20, 55, 20),
+            "csv" => Color.FromArgb(55, 48, 10),
+            "xml" => Color.FromArgb(10, 38, 65),
+            "txt" => Color.FromArgb(48, 18, 58),
+            "postgresql" => Color.FromArgb(10, 28, 75),
+            "mariadb" => Color.FromArgb(58, 28, 10),
+            _ => Color.FromArgb(38, 38, 38)
         };
-        dgv.Rows[idx].DefaultCellStyle.ForeColor = Color.White;
+        dgv.Rows[idx].DefaultCellStyle.ForeColor = Color.FromArgb(230, 230, 240);
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  HELPERS UI
-    // ══════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════
+    //  CONFIGURACIÓN DE GRIDS
+    // ════════════════════════════════════════════════════════════
+    private void ConfigurarDataGridViews()
+    {
+        var columnDefs = new (string Header, int Width, DataGridViewAutoSizeColumnMode Auto)[]
+        {
+            ("ID",        55,  DataGridViewAutoSizeColumnMode.None),
+            ("Nombre",    0,   DataGridViewAutoSizeColumnMode.Fill),
+            ("Categoría", 130, DataGridViewAutoSizeColumnMode.None),
+            ("Valor",     90,  DataGridViewAutoSizeColumnMode.None),
+            ("Fecha",     100, DataGridViewAutoSizeColumnMode.None),
+            ("Fuente",    90,  DataGridViewAutoSizeColumnMode.None),
+        };
 
+        foreach (var dgv in new[] { dgvTodos, dgvCategoria, dgvProcesamiento })
+        {
+            dgv.Columns.Clear();
+            foreach (var (header, width, auto) in columnDefs)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    HeaderText = header,
+                    ReadOnly = true,
+                    AutoSizeMode = auto,
+                    MinimumWidth = 55
+                };
+                if (auto == DataGridViewAutoSizeColumnMode.None) col.Width = width;
+                dgv.Columns.Add(col);
+            }
+            AplicarEstiloGrid(dgv);
+        }
+
+        // Estadísticas
+        dgvEstadisticas.Columns.Clear();
+        var statCols = new (string H, int W, DataGridViewAutoSizeColumnMode A)[]
+        {
+            ("Categoría", 0,   DataGridViewAutoSizeColumnMode.Fill),
+            ("Cant.",     65,  DataGridViewAutoSizeColumnMode.None),
+            ("Promedio",  100, DataGridViewAutoSizeColumnMode.None),
+            ("Máximo",    100, DataGridViewAutoSizeColumnMode.None),
+            ("Mínimo",    100, DataGridViewAutoSizeColumnMode.None),
+            ("Total",     120, DataGridViewAutoSizeColumnMode.None),
+        };
+        foreach (var (h, w, a) in statCols)
+        {
+            var col = new DataGridViewTextBoxColumn { HeaderText = h, ReadOnly = true, AutoSizeMode = a, MinimumWidth = 55 };
+            if (a == DataGridViewAutoSizeColumnMode.None) col.Width = w;
+            dgvEstadisticas.Columns.Add(col);
+        }
+        AplicarEstiloGrid(dgvEstadisticas);
+    }
+
+    private static void AplicarEstiloGrid(DataGridView dgv)
+    {
+        dgv.BackgroundColor = Color.FromArgb(18, 18, 28);
+        dgv.GridColor = Color.FromArgb(55, 55, 75);
+        dgv.BorderStyle = BorderStyle.None;
+
+        dgv.DefaultCellStyle.BackColor = Color.FromArgb(28, 28, 42);
+        dgv.DefaultCellStyle.ForeColor = Color.FromArgb(230, 230, 240);
+        dgv.DefaultCellStyle.Font = new Font("Consolas", 9f);
+        dgv.DefaultCellStyle.SelectionBackColor = Color.FromArgb(0, 100, 180);
+        dgv.DefaultCellStyle.SelectionForeColor = Color.White;
+
+        dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(33, 33, 50);
+
+        dgv.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(42, 42, 60);
+        dgv.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(0, 200, 220);
+        dgv.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+        dgv.ColumnHeadersHeight = 32;
+        dgv.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        dgv.EnableHeadersVisualStyles = false;
+        dgv.AllowUserToAddRows = false;
+        dgv.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        dgv.RowHeadersVisible = false;
+        dgv.RowTemplate.Height = 24;
+        dgv.ScrollBars = ScrollBars.Both;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  UI HELPERS
+    // ════════════════════════════════════════════════════════════
     private void ActualizarEstadoBarra(string mensaje)
     {
         lblStatus.Text = mensaje;
         Application.DoEvents();
     }
 
-    private void ConfigurarDataGridViews()
-    {
-        string[] cols = { "ID", "Nombre", "Categoría", "Valor", "Fecha", "Fuente" };
-        int[]    widths = { 55, 240, 155, 90, 100, 100 };
-
-        foreach (var dgv in new[] { dgvTodos, dgvCategoria, dgvProcesamiento })
-        {
-            dgv.Columns.Clear();
-            for (int i = 0; i < cols.Length; i++)
-                dgv.Columns.Add(new DataGridViewTextBoxColumn
-                {
-                    HeaderText = cols[i],
-                    Width      = widths[i],
-                    ReadOnly   = true
-                });
-
-            dgv.BackgroundColor        = Color.FromArgb(22, 22, 35);
-            dgv.GridColor              = Color.FromArgb(60, 60, 80);
-            dgv.DefaultCellStyle.BackColor = Color.FromArgb(30, 30, 45);
-            dgv.DefaultCellStyle.ForeColor = Color.White;
-            dgv.DefaultCellStyle.Font  = new Font("Consolas", 9f);
-            dgv.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(45, 45, 65);
-            dgv.ColumnHeadersDefaultCellStyle.ForeColor = Color.Cyan;
-            dgv.ColumnHeadersDefaultCellStyle.Font      = new Font("Segoe UI", 9f, FontStyle.Bold);
-            dgv.EnableHeadersVisualStyles = false;
-            dgv.AllowUserToAddRows        = false;
-            dgv.SelectionMode             = DataGridViewSelectionMode.FullRowSelect;
-            dgv.RowHeadersVisible         = false;
-        }
-
-        // Columnas específicas para estadísticas
-        dgvEstadisticas.Columns.Clear();
-        foreach (var (titulo, w) in new[] {
-            ("Categoría",55), ("Cant.",60), ("Promedio",90), ("Máximo",90), ("Mínimo",90), ("Total",110) })
-        {
-            dgvEstadisticas.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = titulo, Width = w+55, ReadOnly = true });
-        }
-        CopiarEstiloGrid(dgvEstadisticas, dgvTodos);
-    }
-
-    private static void CopiarEstiloGrid(DataGridView destino, DataGridView origen)
-    {
-        destino.BackgroundColor = origen.BackgroundColor;
-        destino.GridColor       = origen.GridColor;
-        destino.DefaultCellStyle.BackColor = origen.DefaultCellStyle.BackColor;
-        destino.DefaultCellStyle.ForeColor = origen.DefaultCellStyle.ForeColor;
-        destino.DefaultCellStyle.Font      = origen.DefaultCellStyle.Font;
-        destino.ColumnHeadersDefaultCellStyle.BackColor = origen.ColumnHeadersDefaultCellStyle.BackColor;
-        destino.ColumnHeadersDefaultCellStyle.ForeColor = origen.ColumnHeadersDefaultCellStyle.ForeColor;
-        destino.ColumnHeadersDefaultCellStyle.Font      = origen.ColumnHeadersDefaultCellStyle.Font;
-        destino.EnableHeadersVisualStyles = false;
-        destino.AllowUserToAddRows        = false;
-        destino.SelectionMode             = DataGridViewSelectionMode.FullRowSelect;
-        destino.RowHeadersVisible         = false;
-    }
-
-    private void ConfigurarChart()
-    {
-        chart1.BackColor = Color.FromArgb(22, 22, 35);
-        if (chart1.ChartAreas.Count == 0) chart1.ChartAreas.Add(new ChartArea("Default"));
-        var area = chart1.ChartAreas[0];
-        area.BackColor        = Color.FromArgb(30, 30, 45);
-        area.AxisX.LabelStyle.ForeColor = Color.LightGray;
-        area.AxisY.LabelStyle.ForeColor = Color.LightGray;
-        area.AxisX.LineColor   = Color.SlateGray;
-        area.AxisY.LineColor   = Color.SlateGray;
-        area.AxisX.MajorGrid.LineColor = Color.FromArgb(50, 50, 70);
-        area.AxisY.MajorGrid.LineColor = Color.FromArgb(50, 50, 70);
-    }
-
-    private static Color ColorPorIndice(int i)
-    {
-        Color[] colores =
-        {
-            Color.FromArgb(0, 200, 255), Color.FromArgb(255, 200, 0),
-            Color.FromArgb(0, 255, 128), Color.FromArgb(255, 80, 100),
-            Color.FromArgb(180, 100, 255), Color.FromArgb(255, 150, 50),
-            Color.FromArgb(0, 220, 200), Color.FromArgb(220, 80, 220)
-        };
-        return colores[i % colores.Length];
-    }
-
-    // ══════════════════════════════════════════════════════════════
-    //  MENÚ – Limpiar / Acerca de
-    // ══════════════════════════════════════════════════════════════
-
+    // ════════════════════════════════════════════════════════════
+    //  MENÚ – Limpiar / Acerca de / Salir
+    // ════════════════════════════════════════════════════════════
     private void MenuLimpiarDatos_Click(object sender, EventArgs e)
     {
         if (MessageBox.Show("¿Limpiar todos los datos en memoria?", "Confirmar",
             MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 
-        _datos.Clear();
-        _porCategoria.Clear();
-        _porId.Clear();
-        _datosVista.Clear();
-        dgvTodos.Rows.Clear();
-        dgvCategoria.Rows.Clear();
-        dgvEstadisticas.Rows.Clear();
-        dgvProcesamiento.Rows.Clear();
-        lstCategorias.Items.Clear();
-        clbFuentes.Items.Clear();
-        chart1.Series.Clear();
+        _datos.Clear(); _porCategoria.Clear(); _porId.Clear(); _datosVista.Clear();
+        dgvTodos.Rows.Clear(); dgvCategoria.Rows.Clear();
+        dgvEstadisticas.Rows.Clear(); dgvProcesamiento.Rows.Clear();
+        lstCategorias.Items.Clear(); clbFuentes.Items.Clear();
+        pnlChart.Invalidate();
         lblContadorTodos.Text = "0 registros";
         ActualizarEstadoBarra("Datos limpiados.");
     }
@@ -583,57 +666,50 @@ public partial class MainForm : Form
     private void MenuAcercaDe_Click(object sender, EventArgs e)
         => MessageBox.Show(
             "Data Fusion Arena\nAdministración y Organización de Datos\n\n" +
-            "Ingeniería · 4.º Semestre\nC# .NET 10 · WinForms\n\n" +
-            "Fuentes soportadas: JSON · CSV · XML · TXT · PostgreSQL · MariaDB\n" +
+            "Ingeniería · 4.º Semestre · C# .NET 10 · WinForms\n\n" +
+            "Fuentes: JSON · CSV · XML · TXT · PostgreSQL · MariaDB\n" +
             "Estructuras: List<T> · Dictionary<TKey,TValue>",
             "Acerca de", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
     private void MenuSalir_Click(object sender, EventArgs e) => Close();
 }
 
-// ══════════════════════════════════════════════════════════════
-//  Formulario auxiliar para cadenas de conexión a BD
-// ══════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+//  Formulario auxiliar de conexión a BD
+// ════════════════════════════════════════════════════════════════
 public class FormConexionBD : Form
 {
     public string CadenaConexion { get; private set; } = "";
-    public string NombreTabla    { get; private set; } = "";
+    public string NombreTabla { get; private set; } = "";
 
-    private readonly TextBox txtCadena;
-    private readonly TextBox txtTabla;
+    private readonly TextBox txtCadena, txtTabla;
 
     public FormConexionBD(string motor)
     {
-        Text            = $"Conexión a {motor}";
-        Size            = new Size(520, 260);
-        StartPosition   = FormStartPosition.CenterParent;
+        Text = $"Conexión a {motor}";
+        Size = new Size(520, 260);
+        StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox     = false;
-        BackColor       = Color.FromArgb(30, 30, 45);
-        ForeColor       = Color.White;
+        MaximizeBox = false;
+        BackColor = Color.FromArgb(30, 30, 45);
+        ForeColor = Color.White;
 
         string cadenaDefault = motor == "PostgreSQL"
             ? "Host=localhost;Port=5432;Database=datafusion;Username=postgres;Password=tu_password;"
             : "Server=localhost;Port=3306;Database=datafusion;User=root;Password=tu_password;";
-
         string tablaDefault = motor == "PostgreSQL" ? "videojuegos" : "puntuaciones";
 
-        var lblCadena = new Label { Text = "Cadena de conexión:", Location = new Point(15, 20), AutoSize = true, ForeColor = Color.Cyan };
-        txtCadena = new TextBox { Location = new Point(15, 42), Width = 475, Text = cadenaDefault,
-            BackColor = Color.FromArgb(45, 45, 65), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
+        var lblC = new Label { Text = "Cadena de conexión:", Location = new Point(15, 20), AutoSize = true, ForeColor = Color.Cyan };
+        txtCadena = new TextBox { Location = new Point(15, 42), Width = 475, Text = cadenaDefault, BackColor = Color.FromArgb(45, 45, 65), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
 
-        var lblTabla = new Label { Text = "Nombre de tabla:", Location = new Point(15, 85), AutoSize = true, ForeColor = Color.Cyan };
-        txtTabla = new TextBox { Location = new Point(15, 107), Width = 200, Text = tablaDefault,
-            BackColor = Color.FromArgb(45, 45, 65), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
+        var lblT = new Label { Text = "Nombre de tabla:", Location = new Point(15, 85), AutoSize = true, ForeColor = Color.Cyan };
+        txtTabla = new TextBox { Location = new Point(15, 107), Width = 200, Text = tablaDefault, BackColor = Color.FromArgb(45, 45, 65), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
 
-        var btnOk  = new Button { Text = "Conectar", Location = new Point(310, 170), Width = 90, DialogResult = DialogResult.OK,
-            BackColor = Color.FromArgb(0, 120, 212), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-        var btnCan = new Button { Text = "Cancelar", Location = new Point(410, 170), Width = 80, DialogResult = DialogResult.Cancel,
-            BackColor = Color.FromArgb(80, 30, 30), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-
+        var btnOk = new Button { Text = "Conectar", Location = new Point(310, 170), Width = 90, DialogResult = DialogResult.OK, BackColor = Color.FromArgb(0, 120, 212), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+        var btnCan = new Button { Text = "Cancelar", Location = new Point(410, 170), Width = 80, DialogResult = DialogResult.Cancel, BackColor = Color.FromArgb(80, 30, 30), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
         btnOk.Click += (_, _) => { CadenaConexion = txtCadena.Text.Trim(); NombreTabla = txtTabla.Text.Trim(); };
 
-        Controls.AddRange(new Control[] { lblCadena, txtCadena, lblTabla, txtTabla, btnOk, btnCan });
+        Controls.AddRange(new Control[] { lblC, txtCadena, lblT, txtTabla, btnOk, btnCan });
         AcceptButton = btnOk;
         CancelButton = btnCan;
     }
