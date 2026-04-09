@@ -695,8 +695,8 @@ public class FormConexionBD : Form
         ForeColor = Color.White;
 
         string cadenaDefault = motor == "PostgreSQL"
-            ? "Host=localhost;Port=5432;Database=datafusion;Username=postgres;Password=tu_password;"
-            : "Server=localhost;Port=3306;Database=datafusion;User=root;Password=tu_password;";
+            ? "Host=localhost;Port=5432;Database=Prueba;Username=postgres;Password=papu31;"
+            : "Server=localhost;Port=3306;Database=Prueba;User=root;Password=papu31;";
         string tablaDefault = motor == "PostgreSQL" ? "videojuegos" : "puntuaciones";
 
         var lblC = new Label { Text = "Cadena de conexión:", Location = new Point(15, 20), AutoSize = true, ForeColor = Color.Cyan };
