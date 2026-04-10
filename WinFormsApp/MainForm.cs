@@ -9,9 +9,21 @@ public partial class MainForm : Form
 {
     // ── Estado global ────────────────────────────────────────────
     private readonly List<DataItem> _datos = new();
-    private List<DataItem> _datosVista = new();
+
+    /// <summary>
+    /// Vista filtrada por fuentes seleccionadas en el panel izquierdo.
+    /// TODAS las operaciones (filtrar, ordenar, LINQ) operan sobre _datosBase,
+    /// no sobre _datos completos.
+    /// </summary>
+    private List<DataItem> _datosBase = new(); // datos filtrados por fuente (checkbox)
+    private List<DataItem> _datosVista = new(); // datos filtrados por campo/valor encima de _datosBase
+
     private Dictionary<string, List<DataItem>> _porCategoria = new();
     private Dictionary<int, DataItem> _porId = new();
+
+    // Últimos conectores de BD (para el botón Refresh)
+    private PostgreSqlConnector? _lastPgConnector;
+    private MariaDbConnector? _lastMdConnector;
 
     private readonly string _dirDatos = Path.Combine(
         AppDomain.CurrentDomain.BaseDirectory, "SampleData");
@@ -26,14 +38,12 @@ public partial class MainForm : Form
         ActualizarEstadoBarra("Listo. Cargue datos usando el menú o los botones.");
         Text = "Data Fusion Arena – Administración y Organización de Datos";
 
-        // SplitterDistance se aplica después de que el form tenga tamaño real
         Load += (s, e) =>
         {
             splitMain.SplitterDistance = 170;
             splitCategoria.SplitterDistance = 220;
         };
 
-        // Gráfica sólo se dibuja cuando se selecciona la pestaña
         tabControl1.SelectedIndexChanged += (s, e) =>
         {
             if (tabControl1.SelectedTab == tabGraficas)
@@ -117,10 +127,14 @@ public partial class MainForm : Form
     {
         using var dlg = new FormConexionBD("PostgreSQL");
         if (dlg.ShowDialog() != DialogResult.OK) return;
+
         var pg = new PostgreSqlConnector(dlg.CadenaConexion, dlg.NombreTabla);
         ActualizarEstadoBarra("Conectando a PostgreSQL...");
+
         if (pg.ProbarConexion(out string msg))
         {
+            _lastPgConnector = pg; // guardar para refresh
+            ActualizarEstadoBarra($"Cargando datos de PostgreSQL ({msg})...");
             var datos = pg.LeerDatos();
             DataProcessor.AgregarDatos(_datos, datos);
             ActualizarTodo();
@@ -137,10 +151,14 @@ public partial class MainForm : Form
     {
         using var dlg = new FormConexionBD("MariaDB");
         if (dlg.ShowDialog() != DialogResult.OK) return;
+
         var md = new MariaDbConnector(dlg.CadenaConexion, dlg.NombreTabla);
         ActualizarEstadoBarra("Conectando a MariaDB...");
+
         if (md.ProbarConexion(out string msg))
         {
+            _lastMdConnector = md; // guardar para refresh
+            ActualizarEstadoBarra($"Cargando datos de MariaDB ({msg})...");
             var datos = md.LeerDatos();
             DataProcessor.AgregarDatos(_datos, datos);
             ActualizarTodo();
@@ -153,6 +171,71 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Botón Refresh: re-descarga datos de todas las BDs conectadas.
+    /// Los registros actuales de BD se eliminan y se recargan frescos.
+    /// </summary>
+    private void BtnRefresh_Click(object sender, EventArgs e)
+    {
+        bool hayAlgo = _lastPgConnector != null || _lastMdConnector != null;
+        if (!hayAlgo)
+        {
+            MessageBox.Show("No hay bases de datos conectadas.\nConéctate primero con los botones de PostgreSQL o MariaDB.",
+                "Sin conexión", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        // Eliminar registros que venían de BD
+        _datos.RemoveAll(d => d.Fuente is "postgresql" or "mariadb");
+
+        if (_lastPgConnector != null)
+        {
+            ActualizarEstadoBarra("Actualizando desde PostgreSQL...");
+            try
+            {
+                if (_lastPgConnector.ProbarConexion(out string msg))
+                {
+                    var datos = _lastPgConnector.LeerDatos();
+                    DataProcessor.AgregarDatos(_datos, datos);
+                    ActualizarEstadoBarra($"✅ PostgreSQL actualizado: {datos.Count} registros. {msg}");
+                }
+                else
+                {
+                    ActualizarEstadoBarra($"❌ PostgreSQL: {msg}");
+                }
+            }
+            catch (Exception ex)
+            {
+                ActualizarEstadoBarra($"❌ PostgreSQL error: {ex.Message}");
+            }
+        }
+
+        if (_lastMdConnector != null)
+        {
+            ActualizarEstadoBarra("Actualizando desde MariaDB...");
+            try
+            {
+                if (_lastMdConnector.ProbarConexion(out string msg))
+                {
+                    var datos = _lastMdConnector.LeerDatos();
+                    DataProcessor.AgregarDatos(_datos, datos);
+                    ActualizarEstadoBarra($"✅ MariaDB actualizado: {datos.Count} registros. {msg}");
+                }
+                else
+                {
+                    ActualizarEstadoBarra($"❌ MariaDB: {msg}");
+                }
+            }
+            catch (Exception ex)
+            {
+                ActualizarEstadoBarra($"❌ MariaDB error: {ex.Message}");
+            }
+        }
+
+        ActualizarTodo();
+        ActualizarEstadoBarra($"✅ Datos actualizados. Total: {_datos.Count} registros.");
+    }
+
     // ════════════════════════════════════════════════════════════
     //  TAB 1 – TODOS LOS DATOS
     // ════════════════════════════════════════════════════════════
@@ -160,9 +243,12 @@ public partial class MainForm : Form
     {
         string campo = cmbCampoBusqueda.Text.ToLower();
         string valor = txtBusqueda.Text.Trim();
+
+        // SIEMPRE filtramos sobre _datosBase (respeta fuentes desmarcadas)
         _datosVista = string.IsNullOrEmpty(valor)
-            ? new List<DataItem>(_datos)
-            : DataProcessor.Filtrar(_datos, campo, valor);
+            ? new List<DataItem>(_datosBase)
+            : DataProcessor.Filtrar(_datosBase, campo, valor);
+
         BindGridTodos(_datosVista);
         ActualizarEstadoBarra($"Filtro '{campo}' = '{valor}' → {_datosVista.Count} resultados.");
     }
@@ -170,17 +256,18 @@ public partial class MainForm : Form
     private void BtnLimpiarFiltro_Click(object sender, EventArgs e)
     {
         txtBusqueda.Text = "";
-        _datosVista = new List<DataItem>(_datos);
+        _datosVista = new List<DataItem>(_datosBase);
         BindGridTodos(_datosVista);
-        ActualizarEstadoBarra($"Filtro limpiado. {_datos.Count} registros.");
+        ActualizarEstadoBarra($"Filtro limpiado. {_datosVista.Count} registros visibles.");
     }
 
     private void BtnOrdenar_Click(object sender, EventArgs e)
     {
         string campo = cmbCampoOrden.Text.ToLower();
         bool asc = rbAscendente.Checked;
-        var fuente = _datosVista.Count > 0 ? _datosVista : _datos;
-        var ordenado = DataProcessor.Ordenar(fuente, campo, asc);
+
+        // Ordenar sobre la vista actual (respeta filtros de fuente y de campo)
+        var ordenado = DataProcessor.Ordenar(_datosVista, campo, asc);
         BindGridTodos(ordenado);
         ActualizarEstadoBarra($"Ordenado por '{campo}' {(asc ? "↑" : "↓")}. {ordenado.Count} registros.");
     }
@@ -221,15 +308,13 @@ public partial class MainForm : Form
     // ════════════════════════════════════════════════════════════
     private void BtnActualizarGrafica_Click(object sender, EventArgs e) => pnlChart.Invalidate();
     private void CmbTipoGrafica_SelectedIndexChanged(object sender, EventArgs e) => pnlChart.Invalidate();
-    private void ActualizarGrafica() => pnlChart.Invalidate();
 
     private void PnlChart_Paint(object sender, PaintEventArgs e)
     {
         if (_datos.Count == 0)
         {
             using var fnt = new Font("Segoe UI", 13f);
-            e.Graphics.DrawString("Sin datos. Cargue archivos primero.", fnt,
-                Brushes.Gray, 40, 40);
+            e.Graphics.DrawString("Sin datos. Cargue archivos primero.", fnt, Brushes.Gray, 40, 40);
             return;
         }
 
@@ -240,7 +325,6 @@ public partial class MainForm : Form
                                  .Values
                                  .OrderByDescending(x => x.SumaValores)
                                  .ToList();
-
         if (stats.Count == 0) return;
 
         string tipo = cmbTipoGrafica.Text;
@@ -267,10 +351,8 @@ public partial class MainForm : Form
         double maxVal = stats.Max(s => s.SumaValores);
         if (maxVal <= 0) return;
 
-        // Fondo área
         g.FillRectangle(new SolidBrush(Color.FromArgb(28, 28, 45)), mIzq, mTop, aW, aH);
 
-        // Título
         using var fntT = new Font("Segoe UI", 12f, FontStyle.Bold);
         g.DrawString("Valor total por categoría", fntT, new SolidBrush(Color.FromArgb(230, 230, 240)), mIzq, 8);
 
@@ -281,7 +363,6 @@ public partial class MainForm : Form
 
         if (!horizontal)
         {
-            // Líneas guía horizontales
             using var penGuia = new Pen(Color.FromArgb(50, 50, 70));
             for (int gi = 1; gi <= 4; gi++)
             {
@@ -307,12 +388,10 @@ public partial class MainForm : Form
                 using var br = new SolidBrush(colores[i % colores.Length]);
                 g.FillRectangle(br, x, y, barW, barH);
 
-                // Valor
                 string val = FormatVal(s.SumaValores);
                 var vs = g.MeasureString(val, fntV);
                 g.DrawString(val, fntV, Brushes.White, x + (barW - vs.Width) / 2, Math.Max(mTop, y - vs.Height - 2));
 
-                // Etiqueta
                 string lbl = s.Categoria.Length > 13 ? s.Categoria[..13] + "…" : s.Categoria;
                 g.TranslateTransform(x + barW / 2f, mTop + aH + 5);
                 g.RotateTransform(38);
@@ -322,7 +401,6 @@ public partial class MainForm : Form
         }
         else
         {
-            // Líneas guía verticales
             using var penGuia = new Pen(Color.FromArgb(50, 50, 70));
             for (int gi = 1; gi <= 4; gi++)
             {
@@ -362,8 +440,7 @@ public partial class MainForm : Form
         int y0 = (H - size) / 2;
 
         using var fntT = new Font("Segoe UI", 12f, FontStyle.Bold);
-        g.DrawString("Distribución por categoría", fntT,
-            new SolidBrush(Color.FromArgb(230, 230, 240)), x0, 8);
+        g.DrawString("Distribución por categoría", fntT, new SolidBrush(Color.FromArgb(230, 230, 240)), x0, 8);
 
         var colores = PaletaColores();
         float start = -90f;
@@ -376,7 +453,6 @@ public partial class MainForm : Form
             g.FillPie(br, x0, y0, size, size, start, sweep);
             g.DrawPie(Pens.Black, x0, y0, size, size, start, sweep);
 
-            // Leyenda
             int lx = x0 + size + 25;
             int ly = y0 + i * 24;
             if (ly + 16 > H) break;
@@ -425,6 +501,7 @@ public partial class MainForm : Form
     {
         if (MessageBox.Show("¿Eliminar duplicados? Esta acción no se puede deshacer.",
             "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+
         int antes = _datos.Count;
         var limpia = DataProcessor.EliminarDuplicados(_datos);
         _datos.Clear(); _datos.AddRange(limpia);
@@ -437,14 +514,15 @@ public partial class MainForm : Form
     private void BtnLinqWhere_Click(object sender, EventArgs e)
     {
         string cat = txtLinqFiltro.Text.Trim();
-        var res = DataProcessor.FiltrarLinq(_datos, cat).ToList();
+        // Opera sobre _datosBase para respetar fuentes desmarcadas
+        var res = DataProcessor.FiltrarLinq(_datosBase, cat).ToList();
         BindGridProcesamiento(res);
         lblProcInfo.Text = $"LINQ .Where() → {res.Count} resultados para '{cat}'";
     }
 
     private void BtnLinqGroupBy_Click(object sender, EventArgs e)
     {
-        var grupos = DataProcessor.AgruparLinq(_datos);
+        var grupos = DataProcessor.AgruparLinq(_datosBase);
         dgvProcesamiento.Rows.Clear();
         foreach (var g in grupos.OrderByDescending(g => g.Count()))
             AgregarFilaGrid(dgvProcesamiento, new DataItem
@@ -461,7 +539,7 @@ public partial class MainForm : Form
 
     private void BtnLinqOrderBy_Click(object sender, EventArgs e)
     {
-        var ordenado = DataProcessor.OrdenarLinq(_datos).ToList();
+        var ordenado = DataProcessor.OrdenarLinq(_datosBase).ToList();
         BindGridProcesamiento(ordenado);
         lblProcInfo.Text = $"LINQ .OrderByDescending(Valor) → {ordenado.Count} registros";
     }
@@ -473,16 +551,38 @@ public partial class MainForm : Form
     {
         _porCategoria = DataProcessor.AgruparPorCategoria(_datos);
         _porId = DataProcessor.IndexarPorId(_datos);
-        _datosVista = new List<DataItem>(_datos);
 
-        BindGridTodos(_datos);
+        // Reconstruir _datosBase respetando el estado actual de los checkboxes
+        _datosBase = GetDatosBase();
+        _datosVista = new List<DataItem>(_datosBase);
+
+        BindGridTodos(_datosVista);
         ActualizarListaCategorias();
         ActualizarTabEstadisticas();
         ActualizarFuentesCheckedList();
+        pnlChart.Invalidate();
 
         lblTotalRegistros.Text = $"Total registros: {_datos.Count}";
         lblTotalCategorias.Text = $"Categorías: {_porCategoria.Count}";
         lblTotalFuentes.Text = $"Fuentes: {_datos.Select(d => d.Fuente).Distinct().Count()}";
+    }
+
+    /// <summary>
+    /// Devuelve los datos filtrados según los checkboxes de fuente activos.
+    /// Si no hay ninguno seleccionado (o todos están seleccionados), devuelve todos.
+    /// </summary>
+    private List<DataItem> GetDatosBase()
+    {
+        if (clbFuentes.Items.Count == 0) return new List<DataItem>(_datos);
+
+        var seleccionadas = clbFuentes.CheckedItems
+                                      .Cast<string>()
+                                      .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // Si ninguna está marcada, mostramos todo para no quedarnos con vista vacía
+        if (seleccionadas.Count == 0) return new List<DataItem>(_datos);
+
+        return _datos.Where(d => seleccionadas.Contains(d.Fuente)).ToList();
     }
 
     private void ActualizarListaCategorias()
@@ -494,25 +594,36 @@ public partial class MainForm : Form
 
     private void ActualizarFuentesCheckedList()
     {
+        // Recordar cuáles estaban marcadas antes de recargar
+        var prevSeleccionadas = clbFuentes.CheckedItems
+                                          .Cast<string>()
+                                          .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        clbFuentes.ItemCheck -= ClbFuentes_ItemCheck!;  // evitar disparos durante repoblado
         clbFuentes.Items.Clear();
+
         foreach (var f in _datos.Select(d => d.Fuente).Distinct().OrderBy(f => f))
-            clbFuentes.Items.Add(f, true);
+        {
+            // Si ya había algo seleccionado, mantener estado; si es nueva fuente → marcar
+            bool marcada = prevSeleccionadas.Count == 0 || prevSeleccionadas.Contains(f);
+            clbFuentes.Items.Add(f, marcada);
+        }
+
+        clbFuentes.ItemCheck += ClbFuentes_ItemCheck!;
     }
 
     private void ClbFuentes_ItemCheck(object sender, ItemCheckEventArgs e)
     {
+        // BeginInvoke para que el CheckedItems ya tenga el nuevo estado
         BeginInvoke(() =>
         {
-            var sel = clbFuentes.CheckedItems.Cast<string>()
-                                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (e.NewValue == CheckState.Checked)
-                sel.Add(clbFuentes.Items[e.Index].ToString()!);
-            else
-                sel.Remove(clbFuentes.Items[e.Index].ToString()!);
+            _datosBase = GetDatosBase();
+            _datosVista = new List<DataItem>(_datosBase);
+            BindGridTodos(_datosVista);
 
-            var filtrado = _datos.Where(d => sel.Contains(d.Fuente)).ToList();
-            BindGridTodos(filtrado);
-            ActualizarEstadoBarra($"Mostrando {filtrado.Count} registros de: {string.Join(", ", sel)}");
+            var nombresActivos = clbFuentes.CheckedItems.Cast<string>().ToList();
+            ActualizarEstadoBarra(
+                $"Mostrando {_datosVista.Count} registros de: {string.Join(", ", nombresActivos)}");
         });
     }
 
@@ -590,7 +701,6 @@ public partial class MainForm : Form
             AplicarEstiloGrid(dgv);
         }
 
-        // Estadísticas
         dgvEstadisticas.Columns.Clear();
         var statCols = new (string H, int W, DataGridViewAutoSizeColumnMode A)[]
         {
@@ -654,7 +764,10 @@ public partial class MainForm : Form
         if (MessageBox.Show("¿Limpiar todos los datos en memoria?", "Confirmar",
             MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 
-        _datos.Clear(); _porCategoria.Clear(); _porId.Clear(); _datosVista.Clear();
+        _datos.Clear(); _porCategoria.Clear(); _porId.Clear();
+        _datosBase.Clear(); _datosVista.Clear();
+        _lastPgConnector = null; _lastMdConnector = null;
+
         dgvTodos.Rows.Clear(); dgvCategoria.Rows.Clear();
         dgvEstadisticas.Rows.Clear(); dgvProcesamiento.Rows.Clear();
         lstCategorias.Items.Clear(); clbFuentes.Items.Clear();

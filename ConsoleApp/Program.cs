@@ -10,9 +10,8 @@ class Program
     // ── Estado global de la aplicación ──────────────────────────
     static readonly List<DataItem> _datos = new();
     static Dictionary<string, List<DataItem>> _porCategoria = new();
-    static Dictionary<int, DataItem>          _porId        = new();
+    static Dictionary<int, DataItem> _porId = new();
 
-    // Rutas a los archivos de datos (relativas al ejecutable)
     static readonly string _dirDatos = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SampleData");
 
     static void Main(string[] args)
@@ -76,16 +75,16 @@ class Program
 
         switch (op)
         {
-            case "1": CargarArchivos();    break;
-            case "2": ConectarBD();        break;
-            case "3": VerTodos();          break;
-            case "4": FiltrarDatos();      break;
-            case "5": OrdenarDatos();      break;
-            case "6": VerPorCategoria();   break;
+            case "1": CargarArchivos(); break;
+            case "2": ConectarBD(); break;
+            case "3": VerTodos(); break;
+            case "4": FiltrarDatos(); break;
+            case "5": OrdenarDatos(); break;
+            case "6": VerPorCategoria(); break;
             case "7": MostrarEstadisticas(); break;
-            case "8": GraficaBarras();     break;
+            case "8": GraficaBarras(); break;
             case "9": GestionarDuplicados(); break;
-            case "L": BonusLinq();         break;
+            case "L": BonusLinq(); break;
             case "0": return false;
             default:
                 Color(ConsoleColor.Red, "  ⚠  Opción no válida.\n");
@@ -117,9 +116,9 @@ class Program
         switch (op)
         {
             case "1": CargarJson(Path.Combine(_dirDatos, "products.json")); break;
-            case "2": CargarCsv(Path.Combine(_dirDatos, "sales.csv"));      break;
-            case "3": CargarXml(Path.Combine(_dirDatos, "employees.xml"));  break;
-            case "4": CargarTxt(Path.Combine(_dirDatos, "records.txt"));    break;
+            case "2": CargarCsv(Path.Combine(_dirDatos, "sales.csv")); break;
+            case "3": CargarXml(Path.Combine(_dirDatos, "employees.xml")); break;
+            case "4": CargarTxt(Path.Combine(_dirDatos, "records.txt")); break;
             case "5":
                 CargarJson(Path.Combine(_dirDatos, "products.json"));
                 CargarCsv(Path.Combine(_dirDatos, "sales.csv"));
@@ -127,23 +126,55 @@ class Program
                 CargarTxt(Path.Combine(_dirDatos, "records.txt"));
                 break;
             case "6":
-                Console.Write("  Ruta completa del archivo: ");
-                string? ruta = Console.ReadLine()?.Trim();
-                if (string.IsNullOrEmpty(ruta)) break;
-                string ext = Path.GetExtension(ruta).ToLower();
-                switch (ext)
-                {
-                    case ".json": CargarJson(ruta); break;
-                    case ".csv":  CargarCsv(ruta);  break;
-                    case ".xml":  CargarXml(ruta);  break;
-                    case ".txt":  CargarTxt(ruta);  break;
-                    default: Color(ConsoleColor.Red, $"  Extensión '{ext}' no soportada."); break;
-                }
+                CargarArchivoPersonalizado();
                 break;
         }
 
         ActualizarIndices();
         Color(ConsoleColor.Green, $"\n  ✅ Total acumulado: {_datos.Count} registros en memoria.");
+    }
+
+    /// <summary>
+    /// Carga un archivo personalizado ingresado por el usuario.
+    /// Limpia comillas y espacios del path (frecuentes al arrastrar archivos).
+    /// </summary>
+    static void CargarArchivoPersonalizado()
+    {
+        Console.WriteLine("  Ingresa la ruta del archivo (puedes arrastrar el archivo aquí):");
+        Console.Write("  > ");
+        string? input = Console.ReadLine();
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            Color(ConsoleColor.Yellow, "  Ruta vacía, operación cancelada.");
+            return;
+        }
+
+        // Limpiar comillas (drag-and-drop en algunos terminales las añade)
+        string ruta = input.Trim().Trim('"').Trim('\'').Trim();
+
+        if (!File.Exists(ruta))
+        {
+            Color(ConsoleColor.Red, $"  ❌ Archivo no encontrado:\n     {ruta}");
+            return;
+        }
+
+        string ext = Path.GetExtension(ruta).ToLowerInvariant();
+
+        Color(ConsoleColor.Cyan, $"  Archivo detectado: {Path.GetFileName(ruta)} | Extensión: {ext}");
+
+        switch (ext)
+        {
+            case ".json": CargarJson(ruta); break;
+            case ".csv": CargarCsv(ruta); break;
+            case ".xml": CargarXml(ruta); break;
+            case ".txt": CargarTxt(ruta); break;
+            default:
+                Color(ConsoleColor.Red,
+                    $"  ❌ Extensión '{ext}' no soportada.\n" +
+                    $"     Formatos aceptados: .json  .csv  .xml  .txt");
+                break;
+        }
     }
 
     static void CargarJson(string ruta)
@@ -159,7 +190,6 @@ class Program
     static void CargarXml(string ruta)
     {
         var nuevos = XmlDataReader.Leer(ruta);
-        // Mapear "departamento" → categoria, "salario" → valor
         foreach (var item in nuevos)
         {
             if (item.CamposExtra.TryGetValue("departamento", out var dep))
@@ -205,6 +235,7 @@ class Program
             if (pg.ProbarConexion(out string msg))
             {
                 Color(ConsoleColor.Green, $"  {msg}");
+                Console.WriteLine("  Cargando datos (sin límite)...");
                 var datos = pg.LeerDatos();
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
@@ -231,6 +262,7 @@ class Program
             if (md.ProbarConexion(out string msg))
             {
                 Color(ConsoleColor.Green, $"  {msg}");
+                Console.WriteLine("  Cargando datos (sin límite)...");
                 var datos = md.LeerDatos();
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
@@ -301,7 +333,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  NIVEL 5 – Ordenamiento (QuickSort / BubbleSort, sin LINQ)
+    //  NIVEL 5 – Ordenamiento
     // ══════════════════════════════════════════════════════════════
 
     static void OrdenarDatos()
@@ -477,19 +509,16 @@ class Program
     static void ActualizarIndices()
     {
         _porCategoria = DataProcessor.AgruparPorCategoria(_datos);
-        _porId        = DataProcessor.IndexarPorId(_datos);
+        _porId = DataProcessor.IndexarPorId(_datos);
     }
 
     static void Titulo(string texto)
     {
         Console.ForegroundColor = ConsoleColor.Cyan;
-
         string linea = new string('═', texto.Length + 2);
-
         Console.WriteLine($"\n  ╔{linea}╗");
         Console.WriteLine($"  ║ {texto} ║");
         Console.WriteLine($"  ╚{linea}╝\n");
-
         Console.ResetColor();
     }
 
@@ -502,13 +531,13 @@ class Program
 
     static ConsoleColor FuenteColor(string fuente) => fuente switch
     {
-        "json"       => ConsoleColor.Green,
-        "csv"        => ConsoleColor.Yellow,
-        "xml"        => ConsoleColor.Cyan,
-        "txt"        => ConsoleColor.Magenta,
+        "json" => ConsoleColor.Green,
+        "csv" => ConsoleColor.Yellow,
+        "xml" => ConsoleColor.Cyan,
+        "txt" => ConsoleColor.Magenta,
         "postgresql" => ConsoleColor.Blue,
-        "mariadb"    => ConsoleColor.DarkYellow,
-        _            => ConsoleColor.Gray
+        "mariadb" => ConsoleColor.DarkYellow,
+        _ => ConsoleColor.Gray
     };
 
     static ConsoleColor ColorBarra(string categoria)

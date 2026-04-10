@@ -15,8 +15,8 @@ partial class MainForm
 
     private ToolStrip toolStrip1;
     private ToolStripButton tsBtnCargarTodo, tsBtnJson, tsBtnCsv, tsBtnXml, tsBtnTxt;
-    private ToolStripSeparator tsSep1, tsSep2;
-    private ToolStripButton tsBtnPostgres, tsBtnMariaDB;
+    private ToolStripButton tsBtnPostgres, tsBtnMariaDB, tsBtnRefresh;
+    private ToolStripSeparator tsSep1, tsSep2, tsSep3;
 
     private SplitContainer splitMain;
     private GroupBox grpFuentes;
@@ -45,7 +45,7 @@ partial class MainForm
     private Label lblTotalRegistros, lblTotalCategorias, lblTotalFuentes;
     private DataGridView dgvEstadisticas;
 
-    // Tab 4 – GDI+ (sin Chart)
+    // Tab 4
     private Panel pnlGraficasTop;
     private Label lblTipoGrafica;
     private ComboBox cmbTipoGrafica;
@@ -132,7 +132,15 @@ partial class MainForm
         tsSep2 = new ToolStripSeparator();
         tsBtnPostgres = TSB("🐘 PostgreSQL", Color.LightSkyBlue, BtnConectarPostgres_Click!);
         tsBtnMariaDB = TSB("🐬 MariaDB", Color.Orange, BtnConectarMariaDB_Click!);
-        toolStrip1.Items.AddRange(new ToolStripItem[] { tsBtnCargarTodo, tsSep1, tsBtnJson, tsBtnCsv, tsBtnXml, tsBtnTxt, tsSep2, tsBtnPostgres, tsBtnMariaDB });
+        tsSep3 = new ToolStripSeparator();
+        // ── NUEVO: botón Refresh ──────────────────────────────────
+        tsBtnRefresh = TSB("🔄 Actualizar BD", Color.FromArgb(0, 220, 180), BtnRefresh_Click!);
+        tsBtnRefresh.ToolTipText = "Vuelve a descargar los datos de las bases de datos conectadas";
+        toolStrip1.Items.AddRange(new ToolStripItem[] {
+            tsBtnCargarTodo, tsSep1,
+            tsBtnJson, tsBtnCsv, tsBtnXml, tsBtnTxt, tsSep2,
+            tsBtnPostgres, tsBtnMariaDB, tsSep3,
+            tsBtnRefresh });
 
         // ── StatusStrip ──────────────────────────────────────────
         statusStrip1 = new StatusStrip { BackColor = bgLight };
@@ -219,7 +227,7 @@ partial class MainForm
         tabEstadisticas.Controls.Add(pnlStatsTop);
 
         // ════════════════════════════════════════════════════════
-        //  TAB 4 – Gráficas (GDI+ puro, sin Chart)
+        //  TAB 4 – Gráficas (GDI+ puro)
         // ════════════════════════════════════════════════════════
         pnlGraficasTop = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = bgLight, Padding = new Padding(10, 8, 0, 0) };
         lblTipoGrafica = Lbl("Tipo:", new Point(8, 15), fgCyan);
@@ -236,23 +244,58 @@ partial class MainForm
 
         // ════════════════════════════════════════════════════════
         //  TAB 5 – Procesamiento
+        //  FIX: altura aumentada a 135 y controles reorganizados
+        //  para evitar solapamiento con dgvProcesamiento.
         // ════════════════════════════════════════════════════════
-        pnlProcTop = new Panel { Dock = DockStyle.Top, Height = 100, BackColor = bgLight, Padding = new Padding(10, 8, 10, 6) };
+        pnlProcTop = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 135,          // ← era 100, aumentado para evitar solapamiento
+            BackColor = bgLight,
+            Padding = new Padding(10, 8, 10, 6)
+        };
 
+        // Fila 1 (y=8): botones de duplicados + info
         btnDetectarDuplicados = Btn("🔍 Detectar duplicados", new Point(10, 8), 165, Color.FromArgb(75, 55, 10), BtnDetectarDuplicados_Click!);
         btnEliminarDuplicados = Btn("🗑 Eliminar duplicados", new Point(184, 8), 165, Color.FromArgb(80, 20, 20), BtnEliminarDuplicados_Click!);
         btnEliminarDuplicados.Enabled = false;
-        lblProcInfo = new Label { Text = "Selecciona una operación.", AutoSize = true, Location = new Point(365, 14), ForeColor = fgYellow, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+        lblProcInfo = new Label
+        {
+            Text = "Selecciona una operación.",
+            AutoSize = false,
+            Size = new Size(420, 26),
+            Location = new Point(360, 12),
+            ForeColor = fgYellow,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+        };
 
-        grpLinq = new GroupBox { Text = "⚡ Bonus LINQ", Location = new Point(10, 50), Size = new Size(560, 42), ForeColor = fgYellow, BackColor = bgLight, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold) };
-        lblLinqFiltro = Lbl("Categoría:", new Point(8, 16), fgCyan);
-        txtLinqFiltro = Txt(new Point(78, 13), 130, bgDark, fgWhite);
-        btnLinqWhere = Btn(".Where()", new Point(216, 12), 95, accentBlue, BtnLinqWhere_Click!);
-        btnLinqGroupBy = Btn(".GroupBy()", new Point(318, 12), 95, Color.FromArgb(30, 75, 30), BtnLinqGroupBy_Click!);
-        btnLinqOrderBy = Btn(".OrderBy()", new Point(420, 12), 95, Color.FromArgb(55, 35, 85), BtnLinqOrderBy_Click!);
+        // Separador visual
+        var sepLinea = new Label
+        {
+            Location = new Point(10, 42),
+            Size = new Size(700, 1),
+            BackColor = Color.FromArgb(60, 60, 80)
+        };
+
+        // Fila 2 (y=50): grupo LINQ (altura 75 para no recortarse)
+        grpLinq = new GroupBox
+        {
+            Text = "⚡ Bonus LINQ",
+            Location = new Point(10, 50),
+            Size = new Size(620, 75),    // ← ancho y alto ampliados
+            ForeColor = fgYellow,
+            BackColor = bgLight,
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+        };
+
+        lblLinqFiltro = Lbl("Categoría:", new Point(8, 22), fgCyan);
+        txtLinqFiltro = Txt(new Point(78, 19), 140, bgDark, fgWhite);
+        btnLinqWhere = Btn(".Where()", new Point(228, 18), 95, accentBlue, BtnLinqWhere_Click!);
+        btnLinqGroupBy = Btn(".GroupBy()", new Point(330, 18), 95, Color.FromArgb(30, 75, 30), BtnLinqGroupBy_Click!);
+        btnLinqOrderBy = Btn(".OrderBy()", new Point(432, 18), 95, Color.FromArgb(55, 35, 85), BtnLinqOrderBy_Click!);
         grpLinq.Controls.AddRange(new Control[] { lblLinqFiltro, txtLinqFiltro, btnLinqWhere, btnLinqGroupBy, btnLinqOrderBy });
 
-        pnlProcTop.Controls.AddRange(new Control[] { btnDetectarDuplicados, btnEliminarDuplicados, lblProcInfo, grpLinq });
+        pnlProcTop.Controls.AddRange(new Control[] { btnDetectarDuplicados, btnEliminarDuplicados, lblProcInfo, sepLinea, grpLinq });
 
         dgvProcesamiento = new DataGridView { Dock = DockStyle.Fill };
         tabProcesamiento.Controls.Add(dgvProcesamiento);
@@ -267,7 +310,7 @@ partial class MainForm
         PerformLayout();
     }
 
-    // ── Helpers ──────────────────────────────────────────────────
+    // ── Helpers de construcción ───────────────────────────────────
     private static Label Lbl(string text, Point loc, Color fore)
         => new() { Text = text, Location = loc, AutoSize = true, ForeColor = fore };
 

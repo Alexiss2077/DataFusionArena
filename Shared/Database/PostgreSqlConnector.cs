@@ -9,22 +9,23 @@ namespace DataFusionArena.Shared.Database;
 /// </summary>
 public class PostgreSqlConnector
 {
-    // ── Modifica estos valores según tu instalación ──────────────
     public string CadenaConexion { get; set; } =
         "Host=localhost;Port=5432;Database=datafusion;Username=postgres;Password=tu_password;";
 
     public string Tabla { get; set; } = "videojuegos";
 
-    // ── Constructor que acepta cadena personalizada ───────────────
+    /// <summary>Límite de filas. 0 = sin límite.</summary>
+    public int LimiteFilas { get; set; } = 0;
+
     public PostgreSqlConnector() { }
 
     public PostgreSqlConnector(string cadenaConexion, string tabla = "videojuegos")
     {
         CadenaConexion = cadenaConexion;
-        Tabla          = tabla;
+        Tabla = tabla;
     }
 
-    /// <summary>Lee todos los registros de la tabla configurada.</summary>
+    /// <summary>Lee todos los registros de la tabla configurada (sin límite por defecto).</summary>
     public List<DataItem> LeerDatos()
     {
         var lista = new List<DataItem>();
@@ -35,7 +36,6 @@ public class PostgreSqlConnector
             conn.Open();
             Console.WriteLine($"[PostgreSQL] ✓  Conectado a {conn.Database}");
 
-            // Obtener columnas disponibles en la tabla
             var columnas = ObtenerColumnas(conn, Tabla);
             if (columnas.Count == 0)
             {
@@ -43,10 +43,15 @@ public class PostgreSqlConnector
                 return lista;
             }
 
-            using var cmd = new NpgsqlCommand($"SELECT * FROM {Tabla} LIMIT 1000", conn);
+            // Sin LIMIT a menos que LimiteFilas > 0
+            string sql = LimiteFilas > 0
+                ? $"SELECT * FROM {Tabla} LIMIT {LimiteFilas}"
+                : $"SELECT * FROM {Tabla}";
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.CommandTimeout = 120; // 2 minutos para tablas grandes
             using var reader = cmd.ExecuteReader();
 
-            // Mapa de columnas disponibles (case-insensitive)
             var mapa = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < reader.FieldCount; i++)
                 mapa[reader.GetName(i)] = i;
@@ -56,13 +61,12 @@ public class PostgreSqlConnector
             {
                 var item = new DataItem { Fuente = "postgresql" };
 
-                item.Id        = LeerInt(reader, mapa, "id") ?? contador;
-                item.Nombre    = LeerStr(reader, mapa, "nombre", "name", "titulo") ?? $"Registro-{contador}";
-                item.Categoria = LeerStr(reader, mapa, "categoria", "category", "genero") ?? "Sin categoría";
-                item.Valor     = LeerDbl(reader, mapa, "valor", "value", "precio") ?? 0;
-                item.Fecha     = LeerDate(reader, mapa, "fecha", "date", "fecha_lanzamiento") ?? DateTime.Now;
+                item.Id = LeerInt(reader, mapa, "id") ?? contador;
+                item.Nombre = LeerStr(reader, mapa, "nombre", "name", "titulo") ?? FallbackStr(reader, mapa, "id") ?? $"Registro-{contador}";
+                item.Categoria = LeerStr(reader, mapa, "categoria", "category", "genero") ?? FallbackStr(reader, mapa, "id", "nombre", "name", "titulo", "valor", "value", "precio", "fecha", "date") ?? "Sin categoría";
+                item.Valor = LeerDbl(reader, mapa, "valor", "value", "precio") ?? 0;
+                item.Fecha = LeerDate(reader, mapa, "fecha", "date", "fecha_lanzamiento") ?? DateTime.Now;
 
-                // Columnas extra → CamposExtra
                 foreach (var kv in mapa)
                 {
                     string c = kv.Key.ToLower();
@@ -76,6 +80,10 @@ public class PostgreSqlConnector
 
                 lista.Add(item);
                 contador++;
+
+                // Progreso cada 10 000 registros
+                if (contador % 10_000 == 0)
+                    Console.WriteLine($"[PostgreSQL]    ... {contador} registros leídos");
             }
 
             Console.WriteLine($"[PostgreSQL] ✓  {lista.Count} registros leídos desde tabla '{Tabla}'");
@@ -88,14 +96,16 @@ public class PostgreSqlConnector
         return lista;
     }
 
-    /// <summary>Verifica si la conexión es posible sin leer datos.</summary>
     public bool ProbarConexion(out string mensaje)
     {
         try
         {
             using var conn = new NpgsqlConnection(CadenaConexion);
             conn.Open();
-            mensaje = $"Conexión exitosa a PostgreSQL · DB: {conn.Database} · Servidor: {conn.Host}";
+            // Obtener conteo real de la tabla
+            using var cmd = new NpgsqlCommand($"SELECT COUNT(*) FROM {Tabla}", conn);
+            long total = (long)(cmd.ExecuteScalar() ?? 0L);
+            mensaje = $"Conexión exitosa · DB: {conn.Database} · Servidor: {conn.Host} · Filas en '{Tabla}': {total:N0}";
             return true;
         }
         catch (Exception ex)
@@ -116,21 +126,34 @@ public class PostgreSqlConnector
         return cols;
     }
 
-    private static string? LeerStr(NpgsqlDataReader r, Dictionary<string,int> m, params string[] claves)
+    private static string? LeerStr(NpgsqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
             if (m.TryGetValue(c, out int i) && !r.IsDBNull(i)) return r[i].ToString();
         return null;
     }
 
-    private static int? LeerInt(NpgsqlDataReader r, Dictionary<string,int> m, params string[] claves)
+    /// <summary>Devuelve el valor de la primera columna string que NO esté en la lista de excluidas.</summary>
+    private static string? FallbackStr(NpgsqlDataReader r, Dictionary<string, int> m, params string[] excluir)
+    {
+        var exc = new HashSet<string>(excluir, StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in m)
+            if (!exc.Contains(kv.Key) && !r.IsDBNull(kv.Value))
+            {
+                var val = r[kv.Value]?.ToString();
+                if (!string.IsNullOrWhiteSpace(val)) return val;
+            }
+        return null;
+    }
+
+    private static int? LeerInt(NpgsqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
             if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) && int.TryParse(r[i].ToString(), out int v)) return v;
         return null;
     }
 
-    private static double? LeerDbl(NpgsqlDataReader r, Dictionary<string,int> m, params string[] claves)
+    private static double? LeerDbl(NpgsqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
             if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) &&
@@ -139,7 +162,7 @@ public class PostgreSqlConnector
         return null;
     }
 
-    private static DateTime? LeerDate(NpgsqlDataReader r, Dictionary<string,int> m, params string[] claves)
+    private static DateTime? LeerDate(NpgsqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
             if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) && DateTime.TryParse(r[i].ToString(), out DateTime d)) return d;

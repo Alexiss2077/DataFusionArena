@@ -6,9 +6,18 @@ namespace DataFusionArena.Shared.Readers;
 /// <summary>
 /// Lee un archivo JSON con un arreglo de objetos y lo convierte a List&lt;DataItem&gt;.
 /// Maneja JSON mal formado (evento sorpresa) con try-catch granular.
+/// Si no encuentra columnas con nombres conocidos, usa fallback inteligente
+/// basado en el tipo de dato de cada propiedad.
 /// </summary>
 public static class JsonDataReader
 {
+    // Nombres conocidos para cada campo (en orden de prioridad)
+    private static readonly string[] _nombreKeys = { "nombre", "name", "titulo", "title", "producto", "juego", "descripcion", "description", "player", "jugador" };
+    private static readonly string[] _categoriaKeys = { "categoria", "category", "genero", "genre", "tipo", "type", "grupo", "group", "departamento", "department", "nivel", "level" };
+    private static readonly string[] _valorKeys = { "valor", "value", "precio", "price", "monto", "amount", "score", "puntos", "points", "salario", "salary", "total", "suma" };
+    private static readonly string[] _fechaKeys = { "fecha", "date", "releasedate", "fecha_lanzamiento", "fecha_registro", "created_at", "updated_at", "timestamp" };
+    private static readonly string[] _idKeys = { "id", "Id", "ID", "codigo", "code", "sku" };
+
     public static List<DataItem> Leer(string rutaArchivo)
     {
         var lista = new List<DataItem>();
@@ -23,40 +32,33 @@ public static class JsonDataReader
 
         try
         {
-            // Intenta parsear como arreglo JSON
             using var documento = JsonDocument.Parse(contenido);
             var raiz = documento.RootElement;
 
             var elementos = raiz.ValueKind == JsonValueKind.Array
                 ? raiz.EnumerateArray().ToList()
-                : new List<JsonElement> { raiz };    // acepta objeto único también
+                : new List<JsonElement> { raiz };
 
             int contadorId = 1;
             foreach (var el in elementos)
             {
                 try
                 {
-                    var item = new DataItem
-                    {
-                        Fuente = "json"
-                    };
+                    var item = new DataItem { Fuente = "json" };
 
-                    // ─── Mapeo flexible de propiedades ───
-                    item.Id       = LeerEntero(el, "id", "Id", "ID") ?? contadorId;
-                    item.Nombre   = LeerCadena(el, "nombre", "name", "titulo", "title") ?? $"Item-{contadorId}";
-                    item.Categoria = LeerCadena(el, "categoria", "category", "genero", "genre") ?? "Sin categoría";
-                    item.Valor    = LeerDouble(el, "valor", "value", "precio", "price") ?? 0.0;
-                    item.Fecha    = LeerFecha(el, "fecha", "date", "releaseDate", "fecha_lanzamiento") ?? DateTime.Now;
+                    item.Id = LeerEntero(el, _idKeys) ?? contadorId;
+                    item.Nombre = LeerCadena(el, _nombreKeys) ?? FallbackPrimeraString(el, _idKeys) ?? $"Item-{contadorId}";
+                    item.Categoria = LeerCadena(el, _categoriaKeys) ?? FallbackPrimeraString(el, _idKeys, _nombreKeys) ?? "Sin categoría";
+                    item.Valor = LeerDouble(el, _valorKeys) ?? FallbackPrimerNumero(el, _idKeys) ?? 0.0;
+                    item.Fecha = LeerFecha(el, _fechaKeys) ?? DateTime.Now;
 
                     // Resto de campos → CamposExtra
+                    var usadas = new HashSet<string>(_idKeys.Concat(_nombreKeys).Concat(_categoriaKeys)
+                                                           .Concat(_valorKeys).Concat(_fechaKeys),
+                                                    StringComparer.OrdinalIgnoreCase);
                     foreach (var prop in el.EnumerateObject())
                     {
-                        string clave = prop.Name.ToLower();
-                        if (clave is "id" or "nombre" or "name" or "titulo" or "title"
-                                  or "categoria" or "category" or "genero" or "genre"
-                                  or "valor" or "value" or "precio" or "price"
-                                  or "fecha" or "date" or "releasedate" or "fecha_lanzamiento")
-                            continue;
+                        if (usadas.Contains(prop.Name)) continue;
                         item.CamposExtra[prop.Name] = prop.Value.ToString();
                     }
 
@@ -74,7 +76,6 @@ public static class JsonDataReader
         }
         catch (JsonException ex)
         {
-            // ── Evento sorpresa: JSON mal formado ──
             Console.WriteLine($"[JSON] ✗  JSON mal formado en {Path.GetFileName(rutaArchivo)}: {ex.Message}");
             Console.WriteLine("[JSON]    Intentando recuperar datos válidos...");
             lista.AddRange(RecuperarJsonParcial(contenido));
@@ -84,12 +85,11 @@ public static class JsonDataReader
     }
 
     // ──────────────────────────────────────────────────────────────
-    // Recuperación de emergencia para JSON con errores
+    // Recuperación de emergencia
     // ──────────────────────────────────────────────────────────────
     private static List<DataItem> RecuperarJsonParcial(string contenido)
     {
         var lista = new List<DataItem>();
-        // Intenta encontrar objetos individuales {} aunque el arreglo esté roto
         int inicio = contenido.IndexOf('{');
         int id = 1;
         while (inicio >= 0)
@@ -104,12 +104,12 @@ public static class JsonDataReader
                 var el = doc.RootElement;
                 lista.Add(new DataItem
                 {
-                    Id        = LeerEntero(el, "id") ?? id,
-                    Nombre    = LeerCadena(el, "nombre", "name") ?? $"Recuperado-{id}",
-                    Categoria = LeerCadena(el, "categoria", "category") ?? "Recuperado",
-                    Valor     = LeerDouble(el, "valor", "value") ?? 0,
-                    Fuente    = "json(recuperado)",
-                    Fecha     = DateTime.Now
+                    Id = LeerEntero(el, _idKeys) ?? id,
+                    Nombre = LeerCadena(el, _nombreKeys) ?? FallbackPrimeraString(el, _idKeys) ?? $"Recuperado-{id}",
+                    Categoria = LeerCadena(el, _categoriaKeys) ?? "Recuperado",
+                    Valor = LeerDouble(el, _valorKeys) ?? 0,
+                    Fuente = "json(recuperado)",
+                    Fecha = DateTime.Now
                 });
                 id++;
             }
@@ -137,9 +137,9 @@ public static class JsonDataReader
     }
 
     // ──────────────────────────────────────────────────────────────
-    // Helpers de lectura con múltiples nombres de propiedad posibles
+    // Lectura con múltiples nombres posibles
     // ──────────────────────────────────────────────────────────────
-    private static string? LeerCadena(JsonElement el, params string[] claves)
+    private static string? LeerCadena(JsonElement el, string[] claves)
     {
         foreach (var clave in claves)
             if (el.TryGetProperty(clave, out var p) && p.ValueKind == JsonValueKind.String)
@@ -147,7 +147,7 @@ public static class JsonDataReader
         return null;
     }
 
-    private static int? LeerEntero(JsonElement el, params string[] claves)
+    private static int? LeerEntero(JsonElement el, string[] claves)
     {
         foreach (var clave in claves)
             if (el.TryGetProperty(clave, out var p))
@@ -156,7 +156,7 @@ public static class JsonDataReader
         return null;
     }
 
-    private static double? LeerDouble(JsonElement el, params string[] claves)
+    private static double? LeerDouble(JsonElement el, string[] claves)
     {
         foreach (var clave in claves)
             if (el.TryGetProperty(clave, out var p))
@@ -166,11 +166,45 @@ public static class JsonDataReader
         return null;
     }
 
-    private static DateTime? LeerFecha(JsonElement el, params string[] claves)
+    private static DateTime? LeerFecha(JsonElement el, string[] claves)
     {
         foreach (var clave in claves)
             if (el.TryGetProperty(clave, out var p) && p.ValueKind == JsonValueKind.String)
                 if (DateTime.TryParse(p.GetString(), out DateTime d)) return d;
+        return null;
+    }
+
+    /// <summary>
+    /// Fallback: devuelve el valor de la primera propiedad string que no esté
+    /// en la lista de nombres ya usados.
+    /// </summary>
+    private static string? FallbackPrimeraString(JsonElement el, params string[][] excluidos)
+    {
+        var exc = new HashSet<string>(excluidos.SelectMany(a => a), StringComparer.OrdinalIgnoreCase);
+        foreach (var prop in el.EnumerateObject())
+        {
+            if (exc.Contains(prop.Name)) continue;
+            if (prop.Value.ValueKind == JsonValueKind.String)
+            {
+                var val = prop.Value.GetString();
+                if (!string.IsNullOrWhiteSpace(val)) return val;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Fallback: devuelve el primer número que no sea el ID.
+    /// </summary>
+    private static double? FallbackPrimerNumero(JsonElement el, params string[][] excluidos)
+    {
+        var exc = new HashSet<string>(excluidos.SelectMany(a => a), StringComparer.OrdinalIgnoreCase);
+        foreach (var prop in el.EnumerateObject())
+        {
+            if (exc.Contains(prop.Name)) continue;
+            if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetDouble(out double v))
+                return v;
+        }
         return null;
     }
 }
