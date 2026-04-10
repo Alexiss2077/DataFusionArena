@@ -36,14 +36,14 @@ public class HomeController : Controller
 
         var vm = new HomeViewModel
         {
-            Datos          = todos.Skip((pagina - 1) * PageSize).Take(PageSize).ToList(),
+            Datos = todos.Skip((pagina - 1) * PageSize).Take(PageSize).ToList(),
             TotalRegistros = total,
-            Pagina         = pagina,
-            TotalPaginas   = totalPags,
-            Busqueda       = busqueda,
-            Campo          = campo,
-            Fuentes        = _store.Fuentes(),
-            FuenteActiva   = fuente
+            Pagina = pagina,
+            TotalPaginas = totalPags,
+            Busqueda = busqueda,
+            Campo = campo,
+            Fuentes = _store.Fuentes(),
+            FuenteActiva = fuente
         };
         return View(vm);
     }
@@ -51,11 +51,11 @@ public class HomeController : Controller
     // ── Gráficas ────────────────────────────────────────────────
     public IActionResult Graficas()
     {
-        var stats    = _store.Estadisticas();
-        var todos    = _store.ObtenerTodos();
+        var stats = _store.Estadisticas();
+        var todos = _store.ObtenerTodos();
 
         // Por categoría
-        var cats   = stats.Values.OrderByDescending(s => s.SumaValores).Take(12).ToList();
+        var cats = stats.Values.OrderByDescending(s => s.SumaValores).Take(12).ToList();
 
         // Por fecha (agrupar por mes)
         var porFecha = todos
@@ -73,13 +73,13 @@ public class HomeController : Controller
 
         var vm = new GraficasViewModel
         {
-            Categorias    = cats.Select(s => s.Categoria).ToList(),
-            Totales       = cats.Select(s => Math.Round(s.SumaValores, 2)).ToList(),
-            Fuentes       = porFuente.Select(x => x.Fuente).ToList(),
-            ConteoFuente  = porFuente.Select(x => x.Count).ToList(),
-            Fechas        = porFecha.Select(x => x.Fecha).ToList(),
-            ValoresFecha  = porFecha.Select(x => Math.Round(x.Total, 2)).ToList(),
-            TotalItems    = todos.Count
+            Categorias = cats.Select(s => s.Categoria).ToList(),
+            Totales = cats.Select(s => Math.Round(s.SumaValores, 2)).ToList(),
+            Fuentes = porFuente.Select(x => x.Fuente).ToList(),
+            ConteoFuente = porFuente.Select(x => x.Count).ToList(),
+            Fechas = porFecha.Select(x => x.Fecha).ToList(),
+            ValoresFecha = porFecha.Select(x => Math.Round(x.Total, 2)).ToList(),
+            TotalItems = todos.Count
         };
         return View(vm);
     }
@@ -94,7 +94,7 @@ public class HomeController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var ext  = Path.GetExtension(archivo.FileName).ToLowerInvariant();
+        var ext = Path.GetExtension(archivo.FileName).ToLowerInvariant();
         var tipo = ext.TrimStart('.');
         if (!new[] { ".json", ".csv", ".xml", ".txt" }.Contains(ext))
         {
@@ -117,10 +117,10 @@ public class HomeController : Controller
         List<DataItem> nuevos = tipo switch
         {
             "json" => JsonDataReader.Leer(tmp),
-            "csv"  => CsvDataReader.Leer(tmp),
-            "xml"  => XmlDataReader.Leer(tmp),
-            "txt"  => TxtDataReader.Leer(tmp),
-            _      => new()
+            "csv" => CsvDataReader.Leer(tmp),
+            "xml" => XmlDataReader.Leer(tmp),
+            "txt" => TxtDataReader.Leer(tmp),
+            _ => new()
         };
 
         System.IO.File.Delete(tmp);
@@ -129,12 +129,53 @@ public class HomeController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    // ── Descargar datos ─────────────────────────────────────────
+    [HttpGet]
+    public IActionResult DescargarDatos(string formato = "csv")
+    {
+        var datos = _store.ObtenerTodos();
+        if (datos.Count == 0)
+        {
+            TempData["Error"] = "No hay datos para descargar.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        byte[] contenido;
+        string contentType;
+        string nombreArchivo;
+
+        if (formato == "excel")
+        {
+            contenido = ExportService.ExportarExcel(datos);
+            contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            nombreArchivo = $"{ExportService.GenerarNombreArchivo("datos")}.xlsx";
+        }
+        else
+        {
+            contenido = ExportService.ExportarCsv(datos);
+            contentType = "text/csv; charset=utf-8";
+            nombreArchivo = $"{ExportService.GenerarNombreArchivo("datos")}.csv";
+        }
+
+        return File(contenido, contentType, nombreArchivo);
+    }
+
+    // ── Descargar estadísticas ──────────────────────────────────
+    [HttpGet]
+    public IActionResult DescargarEstadisticas()
+    {
+        var stats = _store.Estadisticas();
+        byte[] contenido = ExportService.ExportarEstadisticasCsv(stats);
+        string nombreArchivo = $"{ExportService.GenerarNombreArchivo("estadisticas")}.csv";
+        return File(contenido, "text/csv; charset=utf-8", nombreArchivo);
+    }
+
     // ── API endpoint para Chart.js (JSON) ───────────────────────
     [HttpGet("/api/chartdata")]
     public IActionResult ChartData()
     {
         var stats = _store.Estadisticas();
-        var data  = stats.Values
+        var data = stats.Values
             .OrderByDescending(s => s.SumaValores)
             .Take(12)
             .Select(s => new { label = s.Categoria, value = Math.Round(s.SumaValores, 2) });

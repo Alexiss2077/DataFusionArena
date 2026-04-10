@@ -2,18 +2,106 @@
 @{ ViewData["Title"] = "Datos"; }
 
 <div class="d-flex align-items-center justify-content-between mb-3">
-    <h4 class="mb-0" style="color:var(--cyan)">
-        <i class="bi bi-table me-2"></i>Todos los Datos
-        <span class="badge bg-secondary ms-2" style="font-size:.7em">@Model.TotalRegistros registros</span>
-    </h4>
-    <!-- Cargar archivo -->
-    <form asp-action="CargarArchivo" method="post" enctype="multipart/form-data" class="d-flex gap-2">
-        <input type="file" name="archivo" accept=".json,.csv,.xml,.txt"
-               class="form-control form-control-sm" style="max-width:220px" required />
-        <button type="submit" class="btn btn-sm btn-outline-cyan">
-            <i class="bi bi-upload"></i> Cargar
+    <div>
+        <h4 class="mb-0" style="color:var(--cyan)">
+            <i class="bi bi-table me-2"></i>Todos los Datos
+            <span class="badge bg-secondary ms-2" style="font-size:.7em">@Model.TotalRegistros registros</span>
+        </h4>
+    </div>
+    <div class="d-flex gap-2">
+        <!-- ⭐ BOTÓN PRINCIPAL: Descargar Dataset Completo -->
+        <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalDescargar" title="Descarga el dataset completo con todos los datos acumulados incluyendo API">
+            <i class="bi bi-cloud-download"></i> 
+            <strong>📦 Descargar Dataset Completo</strong>
         </button>
-    </form>
+
+        <!-- Cargar archivo -->
+        <form asp-action="CargarArchivo" method="post" enctype="multipart/form-data" class="d-flex gap-2">
+            <input type="file" name="archivo" accept=".json,.csv,.xml,.txt"
+                   class="form-control form-control-sm" style="max-width:220px" required />
+            <button type="submit" class="btn btn-sm btn-outline-cyan">
+                <i class="bi bi-upload"></i> Cargar
+            </button>
+        </form>
+
+        <!-- Navegar -->
+        <a asp-action="Graficas" class="btn btn-sm btn-outline-warning">
+            <i class="bi bi-bar-chart"></i> Gráficas
+        </a>
+    </div>
+</div>
+
+<!-- Modal para seleccionar formato de descarga -->
+<div class="modal fade" id="modalDescargar" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: var(--bg-card); border-color: var(--bg-light)">
+            <div class="modal-header" style="border-bottom-color: var(--bg-light)">
+                <h5 class="modal-title" style="color: var(--cyan)">
+                    <i class="bi bi-cloud-download"></i> Descargar Dataset Completo
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info alert-dismissible fade show" style="background: rgba(0,200,220,.15); border-color: var(--cyan); color: var(--fg)">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Información del Dataset:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>✅ @Model.TotalRegistros registros totales acumulados</li>
+                        <li>✅ Incluye todos los datos cargados y de API integrados</li>
+                        <li>✅ Timestamp automático en el nombre del archivo</li>
+                    </ul>
+                </div>
+
+                <p class="text-muted mb-3">Selecciona el formato de descarga:</p>
+
+                <div class="row g-2">
+                    <!-- Opción CSV -->
+                    <div class="col-12">
+                        <a href="@Url.Action("DescargarDatos", "Home", new { formato = "csv" })" 
+                           class="btn btn-outline-success w-100 py-3" 
+                           data-bs-dismiss="modal">
+                            <i class="bi bi-file-earmark-csv"></i>
+                            <div>
+                                <strong>CSV (Recomendado)</strong>
+                                <small class="d-block text-muted">Compatible con Excel, Sheets, Python, R</small>
+                            </div>
+                        </a>
+                    </div>
+
+                    <!-- Opción Excel -->
+                    <div class="col-12">
+                        <a href="@Url.Action("DescargarDatos", "Home", new { formato = "excel" })" 
+                           class="btn btn-outline-warning w-100 py-3" 
+                           data-bs-dismiss="modal">
+                            <i class="bi bi-file-earmark-excel"></i>
+                            <div>
+                                <strong>Excel (.xlsx)</strong>
+                                <small class="d-block text-muted">Formato Microsoft Office con estilos</small>
+                            </div>
+                        </a>
+                    </div>
+
+                    <!-- Opción Estadísticas -->
+                    <div class="col-12">
+                        <a href="@Url.Action("DescargarEstadisticas", "Home")" 
+                           class="btn btn-outline-info w-100 py-3" 
+                           data-bs-dismiss="modal">
+                            <i class="bi bi-graph-up"></i>
+                            <div>
+                                <strong>Estadísticas</strong>
+                                <small class="d-block text-muted">Resumen por categoría (CSV)</small>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top-color: var(--bg-light)">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Filtros -->
@@ -100,8 +188,20 @@
                                     "api-open-meteo"=> "light",
                                     _               => "dark"
                                 };
+                                var icon = item.Fuente switch {
+                                    "json"          => "🟢",
+                                    "csv"           => "📊",
+                                    "xml"           => "📄",
+                                    "txt"           => "📝",
+                                    "postgresql"    => "🐘",
+                                    "mariadb"       => "🐬",
+                                    "api-open-meteo"=> "⛅",
+                                    _               => "📦"
+                                };
                             }
-                            <span class="badge bg-@color badge-fuente">@item.Fuente</span>
+                            <span class="badge bg-@color badge-fuente" title="@item.Fuente">
+                                @icon @item.Fuente
+                            </span>
                         </td>
                     </tr>
                 }
@@ -145,3 +245,75 @@
         </div>
     }
 </div>
+
+<style>
+.badge-fuente {
+    font-size: .75em;
+    font-weight: 600;
+    padding: 0.4rem 0.6rem;
+}
+
+/* Estilos para el modal */
+.modal-content {
+    border: 1px solid var(--bg-light);
+}
+
+.modal-header .btn-close {
+    filter: invert(1);
+}
+
+.btn-outline-success:hover {
+    background-color: #00e080;
+    color: #000;
+    border-color: #00e080;
+}
+
+.btn-outline-warning:hover {
+    background-color: #ffc832;
+    color: #000;
+    border-color: #ffc832;
+}
+
+.btn-outline-info:hover {
+    background-color: #00c8dc;
+    color: #000;
+    border-color: #00c8dc;
+}
+
+/* Botón principal destacado */
+.btn-success {
+    background-color: #00e080 !important;
+    border-color: #00e080 !important;
+    color: #000 !important;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-success:hover {
+    background-color: #00cc70 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 224, 128, 0.3);
+}
+
+.btn-success:active {
+    transform: translateY(0);
+}
+
+/* Animación pulse para el botón principal */
+@@keyframes pulse-green {
+    0%, 100% { 
+        box-shadow: 0 0 0 0 rgba(0, 224, 128, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(0, 224, 128, 0);
+    }
+}
+
+.btn-success {
+    animation: pulse-green 2s infinite;
+}
+
+.btn-success:hover {
+    animation: none;
+}
+</style>
