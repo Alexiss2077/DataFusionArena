@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using DataFusionArena.Shared.Models;
+using DataFusionArena.Shared.Processing;
 
 namespace DataFusionArena.Web.Services;
 
@@ -9,26 +10,34 @@ namespace DataFusionArena.Web.Services;
 public static class ExportService
 {
     /// <summary>Exporta a CSV (texto separado por comas).</summary>
-    public static byte[] ExportarCsv(List<DataItem> datos, string nombreArchivo = "datos")
+    public static byte[] ExportarCsv(List<DataItem> datos)
     {
         var sb = new StringBuilder();
 
-        // Encabezados
+        if (datos.Count == 0)
+        {
+            sb.AppendLine("No hay datos para exportar");
+            return Encoding.UTF8.GetBytes(sb.ToString());
+        }
+
+        // Detectar todas las columnas extra
         var extraKeys = datos
             .SelectMany(d => d.CamposExtra.Keys)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(k => k)
             .ToList();
 
+        // Encabezados
         var headers = new List<string>
         {
             "ID", "Nombre", "Categoría", "Valor", "Fecha", "Fuente"
         };
         headers.AddRange(extraKeys);
 
+        // Escribir encabezados
         sb.AppendLine(string.Join(",", headers.Select(h => $"\"{h}\"")));
 
-        // Filas
+        // Escribir filas
         foreach (var item in datos)
         {
             var fields = new List<string>
@@ -42,7 +51,10 @@ public static class ExportService
             };
 
             foreach (var key in extraKeys)
-                fields.Add(EscapeCsv(item.CamposExtra.TryGetValue(key, out var v) ? v : ""));
+            {
+                var value = item.CamposExtra.TryGetValue(key, out var v) ? v : "";
+                fields.Add(EscapeCsv(value));
+            }
 
             sb.AppendLine(string.Join(",", fields));
         }
@@ -50,22 +62,27 @@ public static class ExportService
         return Encoding.UTF8.GetBytes(sb.ToString());
     }
 
-    /// <summary>Exporta a Excel (.xlsx) usando EPPlus (requiere licencia o referencia).</summary>
-    public static byte[] ExportarExcel(List<DataItem> datos, string nombreArchivo = "datos")
+    /// <summary>Exporta a Excel (.xlsx).</summary>
+    public static byte[] ExportarExcel(List<DataItem> datos)
     {
-        // Si no tienes EPPlus, devuelve CSV como fallback
-        // En producción, agregar: dotnet add package EPPlus
-        return ExportarCsv(datos, nombreArchivo);
+        // Por ahora, devolvemos CSV (para Excel completo se necesaría EPPlus)
+        // Si instalas EPPlus, puedes implementar Excel real
+        return ExportarCsv(datos);
     }
 
     /// <summary>Exporta estadísticas a CSV.</summary>
-    public static byte[] ExportarEstadisticasCsv(
-        Dictionary<string, DataFusionArena.Shared.Processing.EstadisticasCategoria> stats)
+    public static byte[] ExportarEstadisticasCsv(Dictionary<string, EstadisticasCategoria> stats)
     {
         var sb = new StringBuilder();
+
+        // Encabezados
         sb.AppendLine("\"Categoría\",\"Cantidad\",\"Promedio\",\"Máximo\",\"Mínimo\",\"Total\"");
 
-        foreach (var s in stats.Values.OrderByDescending(x => x.SumaValores))
+        // Ordenar por total descendente
+        var ordenado = stats.Values.OrderByDescending(x => x.SumaValores);
+
+        // Filas
+        foreach (var s in ordenado)
         {
             sb.AppendLine(
                 $"\"{EscapeCsvValue(s.Categoria)}\"," +
@@ -79,20 +96,21 @@ public static class ExportService
         return Encoding.UTF8.GetBytes(sb.ToString());
     }
 
-    private static string EscapeCsv(string? value)
+    private static string EscapeCsv(string value)
     {
-        if (string.IsNullOrEmpty(value)) return "\"\"";
+        if (string.IsNullOrEmpty(value))
+            return "\"\"";
+
+        // Si contiene comillas o saltos de línea, escapar
         string escaped = value.Replace("\"", "\"\"");
         return $"\"{escaped}\"";
     }
 
     private static string EscapeCsvValue(string value)
     {
-        if (string.IsNullOrEmpty(value)) return "";
+        if (string.IsNullOrEmpty(value))
+            return "";
+
         return value.Replace("\"", "\"\"");
     }
-
-    /// <summary>Genera nombre de archivo con timestamp.</summary>
-    public static string GenerarNombreArchivo(string prefijo = "datos")
-        => $"{prefijo}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}";
 }

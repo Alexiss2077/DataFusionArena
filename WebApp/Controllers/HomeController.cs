@@ -129,45 +129,65 @@ public class HomeController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    // ── Descargar datos ─────────────────────────────────────────
-    [HttpGet]
+    // ════════════════════════════════════════════════════════════
+    //  DESCARGA DE DATASET COMPLETO ⭐
+    // ════════════════════════════════════════════════════════════
+
+    [HttpGet("descargar-datos")]
     public IActionResult DescargarDatos(string formato = "csv")
     {
-        var datos = _store.ObtenerTodos();
-        if (datos.Count == 0)
+        try
         {
-            TempData["Error"] = "No hay datos para descargar.";
+            var datos = _store.ObtenerTodos();
+            if (datos.Count == 0)
+            {
+                TempData["Error"] = "No hay datos para descargar.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            byte[] contenido;
+            string contentType;
+            string nombreArchivo;
+
+            if (formato.ToLower() == "excel")
+            {
+                // Excel
+                contenido = ExportService.ExportarExcel(datos);
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                nombreArchivo = $"dataset_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.xlsx";
+            }
+            else
+            {
+                // CSV por defecto
+                contenido = ExportService.ExportarCsv(datos);
+                contentType = "text/csv; charset=utf-8";
+                nombreArchivo = $"dataset_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.csv";
+            }
+
+            return File(contenido, contentType, nombreArchivo);
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = $"Error al descargar: {ex.Message}";
             return RedirectToAction(nameof(Index));
         }
-
-        byte[] contenido;
-        string contentType;
-        string nombreArchivo;
-
-        if (formato == "excel")
-        {
-            contenido = ExportService.ExportarExcel(datos);
-            contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-            nombreArchivo = $"{ExportService.GenerarNombreArchivo("datos")}.xlsx";
-        }
-        else
-        {
-            contenido = ExportService.ExportarCsv(datos);
-            contentType = "text/csv; charset=utf-8";
-            nombreArchivo = $"{ExportService.GenerarNombreArchivo("datos")}.csv";
-        }
-
-        return File(contenido, contentType, nombreArchivo);
     }
 
-    // ── Descargar estadísticas ──────────────────────────────────
-    [HttpGet]
+    [HttpGet("descargar-estadisticas")]
     public IActionResult DescargarEstadisticas()
     {
-        var stats = _store.Estadisticas();
-        byte[] contenido = ExportService.ExportarEstadisticasCsv(stats);
-        string nombreArchivo = $"{ExportService.GenerarNombreArchivo("estadisticas")}.csv";
-        return File(contenido, "text/csv; charset=utf-8", nombreArchivo);
+        try
+        {
+            var stats = _store.Estadisticas();
+            byte[] contenido = ExportService.ExportarEstadisticasCsv(stats);
+            string nombreArchivo = $"estadisticas_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.csv";
+            return File(contenido, "text/csv; charset=utf-8", nombreArchivo);
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = $"Error al descargar estadísticas: {ex.Message}";
+            return RedirectToAction(nameof(Index));
+        }
     }
 
     // ── API endpoint para Chart.js (JSON) ───────────────────────

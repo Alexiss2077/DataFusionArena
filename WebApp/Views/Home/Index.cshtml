@@ -10,9 +10,9 @@
     </div>
     <div class="d-flex gap-2">
         <!-- ⭐ BOTÓN PRINCIPAL: Descargar Dataset Completo -->
-        <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalDescargar" title="Descarga el dataset completo con todos los datos acumulados incluyendo API">
+        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalDescargar">
             <i class="bi bi-cloud-download"></i> 
-            <strong>📦 Descargar Dataset Completo</strong>
+            <strong>📦 Dataset Completo</strong>
         </button>
 
         <!-- Cargar archivo -->
@@ -31,75 +31,80 @@
     </div>
 </div>
 
-<!-- Modal para seleccionar formato de descarga -->
-<div class="modal fade" id="modalDescargar" tabindex="-1">
+<!-- MODAL DESCARGA DATASET -->
+<div class="modal fade" id="modalDescargar" tabindex="-1" aria-labelledby="modalDescargaLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" style="background: var(--bg-card); border-color: var(--bg-light)">
-            <div class="modal-header" style="border-bottom-color: var(--bg-light)">
-                <h5 class="modal-title" style="color: var(--cyan)">
+        <div class="modal-content" style="background: var(--bg-card); border-color: var(--bg-light); border: 2px solid var(--bg-light)">
+            
+            <div class="modal-header" style="border-bottom: 2px solid var(--cyan)">
+                <h5 class="modal-title" id="modalDescargaLabel" style="color: var(--cyan); font-weight: 700">
                     <i class="bi bi-cloud-download"></i> Descargar Dataset Completo
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <div class="alert alert-info alert-dismissible fade show" style="background: rgba(0,200,220,.15); border-color: var(--cyan); color: var(--fg)">
-                    <i class="bi bi-info-circle me-2"></i>
+
+            <div class="modal-body" style="padding: 2rem">
+                <!-- Información -->
+                <div class="alert alert-success" style="background: rgba(0,224,128,.15); border-color: #00e080; color: var(--fg); margin-bottom: 1.5rem">
+                    <i class="bi bi-info-circle-fill me-2"></i>
                     <strong>Información del Dataset:</strong>
-                    <ul class="mb-0 mt-2">
-                        <li>✅ @Model.TotalRegistros registros totales acumulados</li>
-                        <li>✅ Incluye todos los datos cargados y de API integrados</li>
-                        <li>✅ Timestamp automático en el nombre del archivo</li>
+                    <ul class="mb-0 mt-2 ps-4">
+                        <li>✅ <strong>@Model.TotalRegistros registros</strong> totales acumulados</li>
+                        <li>✅ Incluye datos cargados (JSON, CSV, XML, TXT)</li>
+                        <li>✅ Incluye datos integrados de API (clima)</li>
+                        <li>✅ Incluye datos de bases de datos (si existen)</li>
+                        <li>✅ Timestamp automático: dataset_YYYY-MM-DD_HH-MM-SS.formato</li>
                     </ul>
                 </div>
 
-                <p class="text-muted mb-3">Selecciona el formato de descarga:</p>
+                <p style="margin-bottom: 1.5rem; font-size: 0.95rem">
+                    <strong>📥 Selecciona el formato:</strong>
+                </p>
 
-                <div class="row g-2">
-                    <!-- Opción CSV -->
-                    <div class="col-12">
-                        <a href="@Url.Action("DescargarDatos", "Home", new { formato = "csv" })" 
-                           class="btn btn-outline-success w-100 py-3" 
-                           data-bs-dismiss="modal">
-                            <i class="bi bi-file-earmark-csv"></i>
-                            <div>
-                                <strong>CSV (Recomendado)</strong>
-                                <small class="d-block text-muted">Compatible con Excel, Sheets, Python, R</small>
-                            </div>
-                        </a>
-                    </div>
+                <!-- Opciones de descarga -->
+                <div class="d-grid gap-2">
+                    
+                    <!-- CSV -->
+                    <a href="/descargar-datos?formato=csv" 
+                       class="btn btn-outline-success btn-lg d-flex align-items-center justify-content-between p-3"
+                       onclick="descargarArchivo(event)">
+                        <div class="text-start">
+                            <div class="fw-bold">📄 CSV (Recomendado)</div>
+                            <small class="text-muted">Compatible con Excel, Sheets, Python, R</small>
+                        </div>
+                        <i class="bi bi-download" style="font-size: 1.5rem; opacity: 0.5"></i>
+                    </a>
 
-                    <!-- Opción Excel -->
-                    <div class="col-12">
-                        <a href="@Url.Action("DescargarDatos", "Home", new { formato = "excel" })" 
-                           class="btn btn-outline-warning w-100 py-3" 
-                           data-bs-dismiss="modal">
-                            <i class="bi bi-file-earmark-excel"></i>
-                            <div>
-                                <strong>Excel (.xlsx)</strong>
-                                <small class="d-block text-muted">Formato Microsoft Office con estilos</small>
-                            </div>
-                        </a>
-                    </div>
+                    <!-- EXCEL -->
+                    <a href="/descargar-datos?formato=excel" 
+                       class="btn btn-outline-warning btn-lg d-flex align-items-center justify-content-between p-3"
+                       onclick="descargarArchivo(event)">
+                        <div class="text-start">
+                            <div class="fw-bold">📊 Excel (.xlsx)</div>
+                            <small class="text-muted">Formato Microsoft Office con estilos</small>
+                        </div>
+                        <i class="bi bi-download" style="font-size: 1.5rem; opacity: 0.5"></i>
+                    </a>
 
-                    <!-- Opción Estadísticas -->
-                    <div class="col-12">
-                        <a href="@Url.Action("DescargarEstadisticas", "Home")" 
-                           class="btn btn-outline-info w-100 py-3" 
-                           data-bs-dismiss="modal">
-                            <i class="bi bi-graph-up"></i>
-                            <div>
-                                <strong>Estadísticas</strong>
-                                <small class="d-block text-muted">Resumen por categoría (CSV)</small>
-                            </div>
-                        </a>
-                    </div>
+                    <!-- ESTADÍSTICAS -->
+                    <a href="/descargar-estadisticas" 
+                       class="btn btn-outline-info btn-lg d-flex align-items-center justify-content-between p-3"
+                       onclick="descargarArchivo(event)">
+                        <div class="text-start">
+                            <div class="fw-bold">📈 Estadísticas</div>
+                            <small class="text-muted">Resumen por categoría (CSV)</small>
+                        </div>
+                        <i class="bi bi-download" style="font-size: 1.5rem; opacity: 0.5"></i>
+                    </a>
+
                 </div>
             </div>
-            <div class="modal-footer" style="border-top-color: var(--bg-light)">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
-                    Cancelar
-                </button>
+
+            <div class="modal-footer" style="border-top: 1px solid var(--bg-light); padding: 1rem">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <small class="text-muted ms-auto">💡 Usa los botones de arriba para descargar</small>
             </div>
+
         </div>
     </div>
 </div>
@@ -188,20 +193,8 @@
                                     "api-open-meteo"=> "light",
                                     _               => "dark"
                                 };
-                                var icon = item.Fuente switch {
-                                    "json"          => "🟢",
-                                    "csv"           => "📊",
-                                    "xml"           => "📄",
-                                    "txt"           => "📝",
-                                    "postgresql"    => "🐘",
-                                    "mariadb"       => "🐬",
-                                    "api-open-meteo"=> "⛅",
-                                    _               => "📦"
-                                };
                             }
-                            <span class="badge bg-@color badge-fuente" title="@item.Fuente">
-                                @icon @item.Fuente
-                            </span>
+                            <span class="badge bg-@color badge-fuente">@item.Fuente</span>
                         </td>
                     </tr>
                 }
@@ -253,53 +246,22 @@
     padding: 0.4rem 0.6rem;
 }
 
-/* Estilos para el modal */
-.modal-content {
-    border: 1px solid var(--bg-light);
-}
-
-.modal-header .btn-close {
-    filter: invert(1);
-}
-
-.btn-outline-success:hover {
-    background-color: #00e080;
-    color: #000;
-    border-color: #00e080;
-}
-
-.btn-outline-warning:hover {
-    background-color: #ffc832;
-    color: #000;
-    border-color: #ffc832;
-}
-
-.btn-outline-info:hover {
-    background-color: #00c8dc;
-    color: #000;
-    border-color: #00c8dc;
-}
-
-/* Botón principal destacado */
+/* Botón principal con animación */
 .btn-success {
     background-color: #00e080 !important;
     border-color: #00e080 !important;
     color: #000 !important;
     font-weight: 600;
-    transition: all 0.3s ease;
+    animation: pulse-green 2s infinite;
 }
 
 .btn-success:hover {
     background-color: #00cc70 !important;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 224, 128, 0.3);
+    animation: none;
 }
 
-.btn-success:active {
-    transform: translateY(0);
-}
-
-/* Animación pulse para el botón principal */
 @@keyframes pulse-green {
     0%, 100% { 
         box-shadow: 0 0 0 0 rgba(0, 224, 128, 0.7);
@@ -309,11 +271,48 @@
     }
 }
 
-.btn-success {
-    animation: pulse-green 2s infinite;
+/* Botones en modal */
+.btn-outline-success:hover {
+    background-color: #00e080 !important;
+    color: #000 !important;
+    border-color: #00e080 !important;
 }
 
-.btn-success:hover {
-    animation: none;
+.btn-outline-warning:hover {
+    background-color: #ffc832 !important;
+    color: #000 !important;
+    border-color: #ffc832 !important;
+}
+
+.btn-outline-info:hover {
+    background-color: #00c8dc !important;
+    color: #000 !important;
+    border-color: #00c8dc !important;
 }
 </style>
+
+<script>
+// Función para descargar archivo
+function descargarArchivo(event) {
+    event.preventDefault();
+    
+    const url = event.currentTarget.getAttribute('href');
+    console.log('Descargando desde:', url);
+    
+    // Crear un elemento <a> temporal para la descarga
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '';
+    
+    // Agregar a DOM, hacer click y remover
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Cerrar modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modalDescargar'));
+    if (modal) {
+        modal.hide();
+    }
+}
+</script>
