@@ -1,3 +1,5 @@
+using System.Windows.Forms.DataVisualization.Charting;
+
 namespace DataFusionArena.WinForms;
 
 partial class MainForm
@@ -45,12 +47,12 @@ partial class MainForm
     private Label lblTotalRegistros, lblTotalCategorias, lblTotalFuentes;
     private DataGridView dgvEstadisticas;
 
-    // Tab 4
+    // ── TAB 4 – Gráficas: ahora usa el control Chart de DataVisualization ──
     private Panel pnlGraficasTop;
     private Label lblTipoGrafica;
     private ComboBox cmbTipoGrafica;
     private Button btnActualizarGrafica;
-    private Panel pnlChart;
+    private Chart chartMain;   // ← REEMPLAZA al Panel pnlChart anterior
 
     // Tab 5
     private Panel pnlProcTop;
@@ -74,48 +76,48 @@ partial class MainForm
     {
         components = new System.ComponentModel.Container();
 
-        var bgDark = Color.FromArgb(18, 18, 28);
-        var bgMid = Color.FromArgb(28, 28, 42);
-        var bgLight = Color.FromArgb(42, 42, 60);
-        var bgPanel = Color.FromArgb(35, 35, 52);
-        var fgWhite = Color.FromArgb(230, 230, 240);
-        var fgCyan = Color.FromArgb(0, 200, 220);
-        var fgYellow = Color.FromArgb(255, 200, 50);
-        var accentBlue = Color.FromArgb(0, 110, 200);
+        var bgDark   = Color.FromArgb(18,  18,  28);
+        var bgMid    = Color.FromArgb(28,  28,  42);
+        var bgLight  = Color.FromArgb(42,  42,  60);
+        var bgPanel  = Color.FromArgb(35,  35,  52);
+        var fgWhite  = Color.FromArgb(230, 230, 240);
+        var fgCyan   = Color.FromArgb(0,   200, 220);
+        var fgYellow = Color.FromArgb(255, 200,  50);
+        var accentBlue = Color.FromArgb(0,  110, 200);
 
         // ── Form ─────────────────────────────────────────────────
         SuspendLayout();
-        ClientSize = new Size(1400, 860);
+        ClientSize  = new Size(1400, 860);
         MinimumSize = new Size(1100, 700);
-        BackColor = bgDark;
-        ForeColor = fgWhite;
-        Font = new Font("Segoe UI", 9f);
-        Text = "Data Fusion Arena";
+        BackColor   = bgDark;
+        ForeColor   = fgWhite;
+        Font        = new Font("Segoe UI", 9f);
+        Text        = "Data Fusion Arena";
         WindowState = FormWindowState.Maximized;
 
         // ── MenuStrip ────────────────────────────────────────────
         menuStrip1 = new MenuStrip { BackColor = bgMid, ForeColor = fgWhite, Renderer = new DarkMenuRenderer() };
 
-        menuArchivo = MI("📂 Archivo", fgWhite);
-        menuCargarJson = MI("JSON", Color.LightGreen, (s, e) => BtnCargarJson_Click(s, e));
-        menuCargarCsv = MI("CSV", Color.Yellow, (s, e) => BtnCargarCsv_Click(s, e));
-        menuCargarXml = MI("XML", Color.LightSkyBlue, (s, e) => BtnCargarXml_Click(s, e));
-        menuCargarTxt = MI("TXT", Color.Violet, (s, e) => BtnCargarTxt_Click(s, e));
-        menuCargarPersonalizado = MI("Cargar archivo...", fgWhite, MenuCargarPersonalizado_Click!);
-        menuSep1 = new ToolStripSeparator();
-        menuLimpiarDatos = MI("Limpiar datos", Color.Tomato, MenuLimpiarDatos_Click!);
-        menuSep2 = new ToolStripSeparator();
-        menuSalir = MI("Salir", Color.Tomato, MenuSalir_Click!);
+        menuArchivo            = MI("📂 Archivo", fgWhite);
+        menuCargarJson         = MI("JSON",             Color.LightGreen, (s, e) => BtnCargarJson_Click(s, e));
+        menuCargarCsv          = MI("CSV",              Color.Yellow,     (s, e) => BtnCargarCsv_Click(s, e));
+        menuCargarXml          = MI("XML",              Color.LightSkyBlue,(s, e)=> BtnCargarXml_Click(s, e));
+        menuCargarTxt          = MI("TXT",              Color.Violet,     (s, e) => BtnCargarTxt_Click(s, e));
+        menuCargarPersonalizado= MI("Cargar archivo...",fgWhite,  MenuCargarPersonalizado_Click!);
+        menuSep1               = new ToolStripSeparator();
+        menuLimpiarDatos       = MI("Limpiar datos",    Color.Tomato, MenuLimpiarDatos_Click!);
+        menuSep2               = new ToolStripSeparator();
+        menuSalir              = MI("Salir",            Color.Tomato, MenuSalir_Click!);
         menuArchivo.DropDownItems.AddRange(new ToolStripItem[] {
             menuCargarJson, menuCargarCsv, menuCargarXml, menuCargarTxt,
             menuCargarPersonalizado, menuSep1, menuLimpiarDatos, menuSep2, menuSalir });
 
         menuBaseDatos = MI("🗄️ Base de Datos", fgWhite);
-        menuPostgres = MI("🐘 PostgreSQL", Color.LightSkyBlue, BtnConectarPostgres_Click!);
-        menuMariaDB = MI("🐬 MariaDB", Color.Orange, BtnConectarMariaDB_Click!);
+        menuPostgres  = MI("🐘 PostgreSQL", Color.LightSkyBlue, BtnConectarPostgres_Click!);
+        menuMariaDB   = MI("🐬 MariaDB",    Color.Orange,       BtnConectarMariaDB_Click!);
         menuBaseDatos.DropDownItems.AddRange(new ToolStripItem[] { menuPostgres, menuMariaDB });
 
-        menuAyuda = MI("❓ Ayuda", fgWhite);
+        menuAyuda    = MI("❓ Ayuda", fgWhite);
         menuAcercaDe = MI("Acerca de...", fgWhite, MenuAcercaDe_Click!);
         menuAyuda.DropDownItems.Add(menuAcercaDe);
         menuStrip1.Items.AddRange(new ToolStripItem[] { menuArchivo, menuBaseDatos, menuAyuda });
@@ -123,18 +125,17 @@ partial class MainForm
 
         // ── ToolStrip ────────────────────────────────────────────
         toolStrip1 = new ToolStrip { BackColor = bgLight, GripStyle = ToolStripGripStyle.Hidden, Padding = new Padding(6, 2, 0, 2) };
-        tsBtnCargarTodo = TSB("⬇  Cargar Todo", fgYellow, BtnCargarTodo_Click!);
-        tsSep1 = new ToolStripSeparator();
-        tsBtnJson = TSB("JSON", Color.LightGreen, BtnCargarJson_Click!);
-        tsBtnCsv = TSB("CSV", Color.Yellow, BtnCargarCsv_Click!);
-        tsBtnXml = TSB("XML", Color.LightSkyBlue, BtnCargarXml_Click!);
-        tsBtnTxt = TSB("TXT", Color.Violet, BtnCargarTxt_Click!);
-        tsSep2 = new ToolStripSeparator();
-        tsBtnPostgres = TSB("🐘 PostgreSQL", Color.LightSkyBlue, BtnConectarPostgres_Click!);
-        tsBtnMariaDB = TSB("🐬 MariaDB", Color.Orange, BtnConectarMariaDB_Click!);
-        tsSep3 = new ToolStripSeparator();
-        // ── NUEVO: botón Refresh ──────────────────────────────────
-        tsBtnRefresh = TSB("🔄 Actualizar BD", Color.FromArgb(0, 220, 180), BtnRefresh_Click!);
+        tsBtnCargarTodo = TSB("⬇  Cargar Todo", fgYellow,                      BtnCargarTodo_Click!);
+        tsSep1          = new ToolStripSeparator();
+        tsBtnJson       = TSB("JSON",            Color.LightGreen,              BtnCargarJson_Click!);
+        tsBtnCsv        = TSB("CSV",             Color.Yellow,                  BtnCargarCsv_Click!);
+        tsBtnXml        = TSB("XML",             Color.LightSkyBlue,            BtnCargarXml_Click!);
+        tsBtnTxt        = TSB("TXT",             Color.Violet,                  BtnCargarTxt_Click!);
+        tsSep2          = new ToolStripSeparator();
+        tsBtnPostgres   = TSB("🐘 PostgreSQL",  Color.LightSkyBlue,            BtnConectarPostgres_Click!);
+        tsBtnMariaDB    = TSB("🐬 MariaDB",     Color.Orange,                  BtnConectarMariaDB_Click!);
+        tsSep3          = new ToolStripSeparator();
+        tsBtnRefresh    = TSB("🔄 Actualizar BD", Color.FromArgb(0, 220, 180), BtnRefresh_Click!);
         tsBtnRefresh.ToolTipText = "Vuelve a descargar los datos de las bases de datos conectadas";
         toolStrip1.Items.AddRange(new ToolStripItem[] {
             tsBtnCargarTodo, tsSep1,
@@ -144,16 +145,16 @@ partial class MainForm
 
         // ── StatusStrip ──────────────────────────────────────────
         statusStrip1 = new StatusStrip { BackColor = bgLight };
-        lblStatus = new ToolStripStatusLabel("Listo.") { ForeColor = Color.LightGray, Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+        lblStatus    = new ToolStripStatusLabel("Listo.") { ForeColor = Color.LightGray, Spring = true, TextAlign = ContentAlignment.MiddleLeft };
         statusStrip1.Items.Add(lblStatus);
 
         // ── SplitContainer principal ─────────────────────────────
         splitMain = new SplitContainer
         {
-            Dock = DockStyle.Fill,
-            Panel1MinSize = 140,
-            FixedPanel = FixedPanel.Panel1,
-            BackColor = bgDark
+            Dock         = DockStyle.Fill,
+            Panel1MinSize= 140,
+            FixedPanel   = FixedPanel.Panel1,
+            BackColor    = bgDark
         };
 
         grpFuentes = new GroupBox { Text = "Fuentes cargadas", Dock = DockStyle.Fill, ForeColor = fgCyan, BackColor = bgPanel, Font = new Font("Segoe UI", 9f, FontStyle.Bold), Padding = new Padding(6) };
@@ -164,12 +165,12 @@ partial class MainForm
         splitMain.Panel1.BackColor = bgDark;
 
         // ── TabControl ───────────────────────────────────────────
-        tabControl1 = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9.5f) };
-        tabTodos = new TabPage("📋  Todos los Datos") { BackColor = bgMid, ForeColor = fgWhite, UseVisualStyleBackColor = false };
-        tabCategoria = new TabPage("📁  Por Categoría") { BackColor = bgMid, ForeColor = fgWhite, UseVisualStyleBackColor = false };
-        tabEstadisticas = new TabPage("📊  Estadísticas") { BackColor = bgMid, ForeColor = fgWhite, UseVisualStyleBackColor = false };
-        tabGraficas = new TabPage("📈  Gráficas") { BackColor = bgMid, ForeColor = fgWhite, UseVisualStyleBackColor = false };
-        tabProcesamiento = new TabPage("⚙️  Procesamiento") { BackColor = bgMid, ForeColor = fgWhite, UseVisualStyleBackColor = false };
+        tabControl1    = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9.5f) };
+        tabTodos       = new TabPage("📋  Todos los Datos")  { BackColor = bgMid, ForeColor = fgWhite, UseVisualStyleBackColor = false };
+        tabCategoria   = new TabPage("📁  Por Categoría")    { BackColor = bgMid, ForeColor = fgWhite, UseVisualStyleBackColor = false };
+        tabEstadisticas= new TabPage("📊  Estadísticas")     { BackColor = bgMid, ForeColor = fgWhite, UseVisualStyleBackColor = false };
+        tabGraficas    = new TabPage("📈  Gráficas")         { BackColor = bgMid, ForeColor = fgWhite, UseVisualStyleBackColor = false };
+        tabProcesamiento=new TabPage("⚙️  Procesamiento")    { BackColor = bgMid, ForeColor = fgWhite, UseVisualStyleBackColor = false };
         tabControl1.TabPages.AddRange(new[] { tabTodos, tabCategoria, tabEstadisticas, tabGraficas, tabProcesamiento });
         splitMain.Panel2.Controls.Add(tabControl1);
         splitMain.Panel2.BackColor = bgDark;
@@ -179,17 +180,17 @@ partial class MainForm
         // ════════════════════════════════════════════════════════
         pnlToolsTodos = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = bgLight, Padding = new Padding(8, 8, 8, 0) };
 
-        lblBuscar = Lbl("Buscar:", new Point(8, 15), fgCyan);
-        cmbCampoBusqueda = Cmb(new Point(68, 11), 105, bgDark, fgWhite, new object[] { "nombre", "categoria", "fuente", "id", "valor" }, 0);
-        txtBusqueda = Txt(new Point(182, 12), 190, bgDark, fgWhite);
-        btnFiltrar = Btn("🔍 Filtrar", new Point(382, 11), 90, accentBlue, BtnFiltrar_Click!);
-        btnLimpiarFiltro = Btn("✖ Limpiar", new Point(480, 11), 80, Color.FromArgb(90, 35, 35), BtnLimpiarFiltro_Click!);
-        lblOrdenar = Lbl("Ordenar:", new Point(578, 15), fgCyan);
-        cmbCampoOrden = Cmb(new Point(645, 11), 105, bgDark, fgWhite, new object[] { "valor", "nombre", "categoria", "fecha", "id" }, 0);
-        rbAscendente = Rb("↑ Asc", new Point(760, 8), true, bgLight);
-        rbDescendente = Rb("↓ Desc", new Point(760, 26), false, bgLight);
-        btnOrdenar = Btn("Ordenar", new Point(830, 11), 85, Color.FromArgb(30, 75, 30), BtnOrdenar_Click!);
-        lblContadorTodos = new Label { Text = "0 registros", AutoSize = true, Location = new Point(930, 15), ForeColor = fgYellow, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
+        lblBuscar       = Lbl("Buscar:", new Point(8, 15), fgCyan);
+        cmbCampoBusqueda= Cmb(new Point(68, 11), 105, bgDark, fgWhite, new object[]{"nombre","categoria","fuente","id","valor"}, 0);
+        txtBusqueda     = Txt(new Point(182, 12), 190, bgDark, fgWhite);
+        btnFiltrar      = Btn("🔍 Filtrar",  new Point(382, 11),  90, accentBlue,               BtnFiltrar_Click!);
+        btnLimpiarFiltro= Btn("✖ Limpiar",   new Point(480, 11),  80, Color.FromArgb(90,35,35),  BtnLimpiarFiltro_Click!);
+        lblOrdenar      = Lbl("Ordenar:", new Point(578, 15), fgCyan);
+        cmbCampoOrden   = Cmb(new Point(645, 11), 105, bgDark, fgWhite, new object[]{"valor","nombre","categoria","fecha","id"}, 0);
+        rbAscendente    = Rb("↑ Asc",  new Point(760, 8),  true,  bgLight);
+        rbDescendente   = Rb("↓ Desc", new Point(760, 26), false, bgLight);
+        btnOrdenar      = Btn("Ordenar", new Point(830, 11),  85, Color.FromArgb(30,75,30),     BtnOrdenar_Click!);
+        lblContadorTodos= new Label { Text = "0 registros", AutoSize = true, Location = new Point(930, 15), ForeColor = fgYellow, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
         pnlToolsTodos.Controls.AddRange(new Control[] { lblBuscar, cmbCampoBusqueda, txtBusqueda, btnFiltrar, btnLimpiarFiltro, lblOrdenar, cmbCampoOrden, rbAscendente, rbDescendente, btnOrdenar, lblContadorTodos });
 
         dgvTodos = new DataGridView { Dock = DockStyle.Fill };
@@ -207,8 +208,8 @@ partial class MainForm
         splitCategoria.Panel1.Controls.AddRange(new Control[] { lstCategorias, lblCatTitulo });
         splitCategoria.Panel1.BackColor = bgPanel;
 
-        lblCatInfo = new Label { Dock = DockStyle.Top, Height = 30, TextAlign = ContentAlignment.MiddleLeft, ForeColor = fgYellow, BackColor = bgLight, Padding = new Padding(8, 0, 0, 0), Font = new Font("Segoe UI", 9f) };
-        dgvCategoria = new DataGridView { Dock = DockStyle.Fill };
+        lblCatInfo    = new Label { Dock = DockStyle.Top, Height = 30, TextAlign = ContentAlignment.MiddleLeft, ForeColor = fgYellow, BackColor = bgLight, Padding = new Padding(8,0,0,0), Font = new Font("Segoe UI", 9f) };
+        dgvCategoria  = new DataGridView { Dock = DockStyle.Fill };
         splitCategoria.Panel2.Controls.AddRange(new Control[] { dgvCategoria, lblCatInfo });
         splitCategoria.Panel2.BackColor = bgMid;
         tabCategoria.Controls.Add(splitCategoria);
@@ -216,83 +217,79 @@ partial class MainForm
         // ════════════════════════════════════════════════════════
         //  TAB 3 – Estadísticas
         // ════════════════════════════════════════════════════════
-        pnlStatsTop = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = bgLight, Padding = new Padding(10, 0, 0, 0) };
-        lblTotalRegistros = new Label { Text = "Total registros: 0", AutoSize = true, Location = new Point(10, 12), ForeColor = fgYellow, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
-        lblTotalCategorias = new Label { Text = "Categorías: 0", AutoSize = true, Location = new Point(200, 12), ForeColor = fgCyan, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
-        lblTotalFuentes = new Label { Text = "Fuentes: 0", AutoSize = true, Location = new Point(370, 12), ForeColor = Color.Violet, Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        pnlStatsTop      = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = bgLight, Padding = new Padding(10, 0, 0, 0) };
+        lblTotalRegistros= new Label { Text = "Total registros: 0", AutoSize = true, Location = new Point(10, 12), ForeColor = fgYellow,       Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        lblTotalCategorias=new Label { Text = "Categorías: 0",      AutoSize = true, Location = new Point(200, 12), ForeColor = fgCyan,         Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
+        lblTotalFuentes  = new Label { Text = "Fuentes: 0",         AutoSize = true, Location = new Point(370, 12), ForeColor = Color.Violet,   Font = new Font("Segoe UI", 9.5f, FontStyle.Bold) };
         pnlStatsTop.Controls.AddRange(new Control[] { lblTotalRegistros, lblTotalCategorias, lblTotalFuentes });
 
-        dgvEstadisticas = new DataGridView { Dock = DockStyle.Fill };
+        dgvEstadisticas  = new DataGridView { Dock = DockStyle.Fill };
         tabEstadisticas.Controls.Add(dgvEstadisticas);
         tabEstadisticas.Controls.Add(pnlStatsTop);
 
         // ════════════════════════════════════════════════════════
-        //  TAB 4 – Gráficas (GDI+ puro)
+        //  TAB 4 – Gráficas con control Chart (DataVisualization)
         // ════════════════════════════════════════════════════════
         pnlGraficasTop = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = bgLight, Padding = new Padding(10, 8, 0, 0) };
         lblTipoGrafica = Lbl("Tipo:", new Point(8, 15), fgCyan);
-        cmbTipoGrafica = Cmb(new Point(55, 11), 120, bgDark, fgWhite, new object[] { "Columnas", "Barras", "Pastel" }, 0);
+        cmbTipoGrafica = Cmb(new Point(55, 11), 120, bgDark, fgWhite, new object[]{"Columnas","Barras","Pastel"}, 0);
         cmbTipoGrafica.SelectedIndexChanged += CmbTipoGrafica_SelectedIndexChanged!;
         btnActualizarGrafica = Btn("🔄 Actualizar", new Point(190, 11), 115, accentBlue, BtnActualizarGrafica_Click!);
         pnlGraficasTop.Controls.AddRange(new Control[] { lblTipoGrafica, cmbTipoGrafica, btnActualizarGrafica });
 
-        pnlChart = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 18, 28) };
-        pnlChart.Paint += PnlChart_Paint!;
-        pnlChart.Resize += (s, e) => pnlChart.Invalidate();
-        tabGraficas.Controls.Add(pnlChart);
+        // ── Control Chart (reemplaza Panel pnlChart con GDI+) ──────────────
+        chartMain = new Chart
+        {
+            Dock            = DockStyle.Fill,
+            BackColor       = Color.FromArgb(18, 18, 28),
+            BorderlineColor = Color.FromArgb(42, 42, 60),
+            BorderlineDashStyle = ChartDashStyle.Solid
+        };
+        tabGraficas.Controls.Add(chartMain);
         tabGraficas.Controls.Add(pnlGraficasTop);
+        // ── Fin Tab 4 ────────────────────────────────────────────
 
         // ════════════════════════════════════════════════════════
         //  TAB 5 – Procesamiento
-        //  FIX: altura aumentada a 135 y controles reorganizados
-        //  para evitar solapamiento con dgvProcesamiento.
         // ════════════════════════════════════════════════════════
         pnlProcTop = new Panel
         {
-            Dock = DockStyle.Top,
-            Height = 135,          // ← era 100, aumentado para evitar solapamiento
-            BackColor = bgLight,
-            Padding = new Padding(10, 8, 10, 6)
+            Dock       = DockStyle.Top,
+            Height     = 135,
+            BackColor  = bgLight,
+            Padding    = new Padding(10, 8, 10, 6)
         };
 
-        // Fila 1 (y=8): botones de duplicados + info
-        btnDetectarDuplicados = Btn("🔍 Detectar duplicados", new Point(10, 8), 165, Color.FromArgb(75, 55, 10), BtnDetectarDuplicados_Click!);
-        btnEliminarDuplicados = Btn("🗑 Eliminar duplicados", new Point(184, 8), 165, Color.FromArgb(80, 20, 20), BtnEliminarDuplicados_Click!);
+        btnDetectarDuplicados = Btn("🔍 Detectar duplicados", new Point(10, 8),  165, Color.FromArgb(75,55,10),  BtnDetectarDuplicados_Click!);
+        btnEliminarDuplicados = Btn("🗑 Eliminar duplicados", new Point(184, 8), 165, Color.FromArgb(80,20,20),  BtnEliminarDuplicados_Click!);
         btnEliminarDuplicados.Enabled = false;
         lblProcInfo = new Label
         {
-            Text = "Selecciona una operación.",
+            Text     = "Selecciona una operación.",
             AutoSize = false,
-            Size = new Size(420, 26),
+            Size     = new Size(420, 26),
             Location = new Point(360, 12),
-            ForeColor = fgYellow,
-            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+            ForeColor= fgYellow,
+            Font     = new Font("Segoe UI", 9f, FontStyle.Bold)
         };
 
-        // Separador visual
-        var sepLinea = new Label
-        {
-            Location = new Point(10, 42),
-            Size = new Size(700, 1),
-            BackColor = Color.FromArgb(60, 60, 80)
-        };
+        var sepLinea = new Label { Location = new Point(10, 42), Size = new Size(700, 1), BackColor = Color.FromArgb(60,60,80) };
 
-        // Fila 2 (y=50): grupo LINQ (altura 75 para no recortarse)
         grpLinq = new GroupBox
         {
-            Text = "⚡ Bonus LINQ",
-            Location = new Point(10, 50),
-            Size = new Size(620, 75),    // ← ancho y alto ampliados
+            Text      = "⚡ Bonus LINQ",
+            Location  = new Point(10, 50),
+            Size      = new Size(620, 75),
             ForeColor = fgYellow,
             BackColor = bgLight,
-            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+            Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold)
         };
 
-        lblLinqFiltro = Lbl("Categoría:", new Point(8, 22), fgCyan);
-        txtLinqFiltro = Txt(new Point(78, 19), 140, bgDark, fgWhite);
-        btnLinqWhere = Btn(".Where()", new Point(228, 18), 95, accentBlue, BtnLinqWhere_Click!);
-        btnLinqGroupBy = Btn(".GroupBy()", new Point(330, 18), 95, Color.FromArgb(30, 75, 30), BtnLinqGroupBy_Click!);
-        btnLinqOrderBy = Btn(".OrderBy()", new Point(432, 18), 95, Color.FromArgb(55, 35, 85), BtnLinqOrderBy_Click!);
+        lblLinqFiltro  = Lbl("Categoría:", new Point(8, 22), fgCyan);
+        txtLinqFiltro  = Txt(new Point(78, 19), 140, bgDark, fgWhite);
+        btnLinqWhere   = Btn(".Where()",   new Point(228, 18), 95, accentBlue,               BtnLinqWhere_Click!);
+        btnLinqGroupBy = Btn(".GroupBy()", new Point(330, 18), 95, Color.FromArgb(30,75,30),  BtnLinqGroupBy_Click!);
+        btnLinqOrderBy = Btn(".OrderBy()", new Point(432, 18), 95, Color.FromArgb(55,35,85),  BtnLinqOrderBy_Click!);
         grpLinq.Controls.AddRange(new Control[] { lblLinqFiltro, txtLinqFiltro, btnLinqWhere, btnLinqGroupBy, btnLinqOrderBy });
 
         pnlProcTop.Controls.AddRange(new Control[] { btnDetectarDuplicados, btnEliminarDuplicados, lblProcInfo, sepLinea, grpLinq });
@@ -358,22 +355,22 @@ class DarkMenuRenderer : ToolStripProfessionalRenderer
 
 class DarkColorTable : ProfessionalColorTable
 {
-    private static readonly Color BgDark = Color.FromArgb(28, 28, 42);
-    private static readonly Color BgMid = Color.FromArgb(42, 42, 60);
-    private static readonly Color Accent = Color.FromArgb(0, 110, 200);
-    public override Color MenuItemSelected => BgMid;
-    public override Color MenuItemBorder => Accent;
-    public override Color MenuBorder => BgMid;
-    public override Color MenuItemSelectedGradientBegin => BgMid;
-    public override Color MenuItemSelectedGradientEnd => BgMid;
-    public override Color MenuItemPressedGradientBegin => Accent;
-    public override Color MenuItemPressedGradientEnd => Accent;
-    public override Color ToolStripDropDownBackground => BgDark;
-    public override Color ImageMarginGradientBegin => BgDark;
-    public override Color ImageMarginGradientMiddle => BgDark;
-    public override Color ImageMarginGradientEnd => BgDark;
-    public override Color MenuStripGradientBegin => BgDark;
-    public override Color MenuStripGradientEnd => BgDark;
-    public override Color SeparatorDark => Color.FromArgb(55, 55, 75);
-    public override Color SeparatorLight => Color.FromArgb(55, 55, 75);
+    private static readonly Color BgDark  = Color.FromArgb(28, 28, 42);
+    private static readonly Color BgMid   = Color.FromArgb(42, 42, 60);
+    private static readonly Color Accent  = Color.FromArgb(0,  110, 200);
+    public override Color MenuItemSelected                  => BgMid;
+    public override Color MenuItemBorder                    => Accent;
+    public override Color MenuBorder                        => BgMid;
+    public override Color MenuItemSelectedGradientBegin     => BgMid;
+    public override Color MenuItemSelectedGradientEnd       => BgMid;
+    public override Color MenuItemPressedGradientBegin      => Accent;
+    public override Color MenuItemPressedGradientEnd        => Accent;
+    public override Color ToolStripDropDownBackground       => BgDark;
+    public override Color ImageMarginGradientBegin          => BgDark;
+    public override Color ImageMarginGradientMiddle         => BgDark;
+    public override Color ImageMarginGradientEnd            => BgDark;
+    public override Color MenuStripGradientBegin            => BgDark;
+    public override Color MenuStripGradientEnd              => BgDark;
+    public override Color SeparatorDark                     => Color.FromArgb(55, 55, 75);
+    public override Color SeparatorLight                    => Color.FromArgb(55, 55, 75);
 }
