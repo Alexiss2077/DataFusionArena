@@ -635,37 +635,128 @@ public partial class MainForm : Form
         ActualizarEstadoBarra($"Registros actuales: {_datos.Count}");
     }
 
-    private async void BtnLinqWhere_Click(object? sender, EventArgs e)
+    // ──────────────────────────────────────────────────────────────
+    //  Helpers de búsqueda insensible a acentos y mayúsculas
+    //  "accion" → encuentra "Action", "Acción", "acción", "ACTION"
+    // ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Quita acentos y convierte a minúsculas para comparación robusta.
+    /// Ejemplo: "Acción" → "accion", "Pokémon" → "pokemon"
+    /// </summary>
+    private static string Normalizar(string texto)
     {
-        string cat = txtLinqFiltro.Text.Trim();
-        var res = await Task.Run(() => DataProcessor.FiltrarLinq(_datosBase, cat).ToList());
-        await BindGridAsync(dgvProcesamiento, res, null);
-        lblProcInfo.Text = $"LINQ .Where() → {res.Count} resultados para '{cat}'";
+        if (string.IsNullOrEmpty(texto)) return "";
+        var formD = texto.Normalize(System.Text.NormalizationForm.FormD);
+        var sb    = new System.Text.StringBuilder(formD.Length);
+        foreach (char c in formD)
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
+                != System.Globalization.UnicodeCategory.NonSpacingMark)
+                sb.Append(char.ToLowerInvariant(c));
+        return sb.ToString();
     }
 
+    /// <summary>Busca 'busqueda' dentro de 'texto' ignorando acentos y mayúsculas.</summary>
+    private static bool ContieneNorm(string texto, string busqueda)
+        => Normalizar(texto).Contains(Normalizar(busqueda));
+
+    // ──────────────────────────────────────────────────────────────
+    //  LINQ .Where()  – ahora con campo seleccionable y búsqueda normalizada
+    // ──────────────────────────────────────────────────────────────
+    private async void BtnLinqWhere_Click(object? sender, EventArgs e)
+    {
+        string busqueda = txtLinqFiltro.Text.Trim();
+        string campo    = cmbLinqCampo?.Text ?? "Categoría";
+
+        if (string.IsNullOrEmpty(busqueda))
+        {
+            lblProcInfo.Text = "⚠  Escribe un término en el cuadro «Buscar» antes de usar .Where()";
+            return;
+        }
+
+        // Filtro con .Where() + búsqueda insensible a acentos y mayúsculas
+        var res = await Task.Run(() =>
+            _datosBase.Where(d => campo switch
+            {
+                "Nombre" => ContieneNorm(d.Nombre,    busqueda),
+                "Fuente" => ContieneNorm(d.Fuente,    busqueda),
+                // ID: coincidencia exacta si es número, parcial si es texto
+                "ID"     => int.TryParse(busqueda, out int idNum)
+                                ? d.Id == idNum
+                                : d.Id.ToString().Contains(busqueda),
+                _        => ContieneNorm(d.Categoria, busqueda)   // "Categoría" por defecto
+            }).ToList());
+
+        await BindGridAsync(dgvProcesamiento, res, null);
+
+        string icono = res.Count > 0 ? "✅" : "⚠ ";
+
+        // Mensaje descriptivo adaptado al campo buscado
+        string descripcion = campo == "ID"
+            ? (int.TryParse(busqueda, out _)
+                ? $"LINQ .Where(d.Id == {busqueda})"
+                : $"LINQ .Where(d.Id.ToString().Contains(\"{busqueda}\"))")
+            : $"LINQ .Where({campo}.Contains(\"{busqueda}\"))";
+
+        lblProcInfo.Text = res.Count > 0
+            ? $"{icono} {descripcion} → {res.Count} registro(s)"
+            : $"{icono} {descripcion} → Sin resultados" +
+              (campo == "Categoría" ? "  [Tip: prueba 'sport', 'role', 'action'...]" :
+               campo == "ID"        ? "  [Tip: escribe el número exacto del ID]" : "");
+
+        ActualizarEstadoBarra($"LINQ .Where(): {res.Count} resultados para '{busqueda}' en [{campo}]");
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  LINQ .GroupBy()
+    // ──────────────────────────────────────────────────────────────
     private async void BtnLinqGroupBy_Click(object? sender, EventArgs e)
     {
         var grupos = await Task.Run(() =>
             DataProcessor.AgruparLinq(_datosBase)
+                .OrderByDescending(g => g.Count())
                 .Select(g => new DataItem
                 {
                     Id        = g.Count(),
                     Nombre    = g.Key,
-                    Categoria = $"{g.Count()} items",
-                    Valor     = g.Average(x => x.Valor),
+                    Categoria = $"{g.Count()} registros",
+                    Valor     = Math.Round(g.Average(x => x.Valor), 2),
                     Fuente    = "LINQ GroupBy",
                     Fecha     = DateTime.Now
                 }).ToList());
 
         await BindGridAsync(dgvProcesamiento, grupos, null);
-        lblProcInfo.Text = $"LINQ .GroupBy() → {grupos.Count} grupos";
+        lblProcInfo.Text =
+            $"✅ LINQ .GroupBy(Categoría) → {grupos.Count} grupo(s)  " +
+            $"[ID = cantidad, Valor = promedio]";
+        ActualizarEstadoBarra($"LINQ .GroupBy(): {grupos.Count} grupos distintos");
     }
 
+    // ──────────────────────────────────────────────────────────────
+    //  LINQ .OrderBy()
+    // ──────────────────────────────────────────────────────────────
     private async void BtnLinqOrderBy_Click(object? sender, EventArgs e)
     {
-        var ordenado = await Task.Run(() => DataProcessor.OrdenarLinq(_datosBase).ToList());
+        var ordenado = await Task.Run(() =>
+            DataProcessor.OrdenarLinq(_datosBase).ToList());
+
         await BindGridAsync(dgvProcesamiento, ordenado, null);
-        lblProcInfo.Text = $"LINQ .OrderByDescending(Valor) → {ordenado.Count} registros";
+        lblProcInfo.Text =
+            $"✅ LINQ .OrderByDescending(Valor).ThenBy(Nombre) → {ordenado.Count} registros";
+        ActualizarEstadoBarra($"LINQ .OrderBy(): {ordenado.Count} registros ordenados por valor ↓");
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  Limpiar resultados del grid de Procesamiento
+    // ──────────────────────────────────────────────────────────────
+    private void BtnLinqLimpiar_Click(object? sender, EventArgs e)
+    {
+        txtLinqFiltro.Text          = "";
+        dgvProcesamiento.DataSource = null;
+        dgvProcesamiento.Columns.Clear();
+        lblProcInfo.Text            = "Resultados limpiados. Selecciona una operación.";
+        btnEliminarDuplicados.Enabled = false;
+        ActualizarEstadoBarra("Grid de procesamiento limpiado.");
     }
 
     // ════════════════════════════════════════════════════════════
@@ -987,6 +1078,11 @@ public partial class MainForm : Form
         dgvEstadisticas.Rows.Clear();
         lstCategorias.Items.Clear();
         clbFuentes.Items.Clear();
+
+        // Limpiar controles de Procesamiento
+        txtLinqFiltro.Text            = "";
+        lblProcInfo.Text              = "Selecciona una operación.";
+        btnEliminarDuplicados.Enabled = false;
 
         // Reiniciar Chart
         InicializarChart();

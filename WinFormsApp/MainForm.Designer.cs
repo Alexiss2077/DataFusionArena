@@ -54,13 +54,14 @@ partial class MainForm
     private Button btnActualizarGrafica;
     private Chart chartMain;   // ← REEMPLAZA al Panel pnlChart anterior
 
-    // Tab 5
-    private Panel pnlProcTop;
+    // Tab 5 – dos paneles separados para mejor layout
+    private Panel pnlDuplicados;   // fila superior: botones de duplicados
+    private Panel pnlLinqArea;     // fila inferior: controles LINQ
     private Button btnDetectarDuplicados, btnEliminarDuplicados;
-    private GroupBox grpLinq;
-    private Label lblLinqFiltro, lblProcInfo;
+    private Label lblProcInfo;
+    private ComboBox cmbLinqCampo;          // selector de campo (Categoría / Nombre / Fuente)
     private TextBox txtLinqFiltro;
-    private Button btnLinqWhere, btnLinqGroupBy, btnLinqOrderBy;
+    private Button btnLinqWhere, btnLinqGroupBy, btnLinqOrderBy, btnLinqLimpiar;
     private DataGridView dgvProcesamiento;
 
     private StatusStrip statusStrip1;
@@ -250,53 +251,117 @@ partial class MainForm
         // ── Fin Tab 4 ────────────────────────────────────────────
 
         // ════════════════════════════════════════════════════════
-        //  TAB 5 – Procesamiento
+        //  TAB 5 – Procesamiento  (layout: 2 paneles top + grid fill)
         // ════════════════════════════════════════════════════════
-        pnlProcTop = new Panel
+
+        // ── Panel A: Duplicados (48 px) ──────────────────────────
+        pnlDuplicados = new Panel
         {
-            Dock       = DockStyle.Top,
-            Height     = 135,
-            BackColor  = bgLight,
-            Padding    = new Padding(10, 8, 10, 6)
+            Dock      = DockStyle.Top,
+            Height    = 48,
+            BackColor = bgLight,
         };
 
-        btnDetectarDuplicados = Btn("🔍 Detectar duplicados", new Point(10, 8),  165, Color.FromArgb(75,55,10),  BtnDetectarDuplicados_Click!);
-        btnEliminarDuplicados = Btn("🗑 Eliminar duplicados", new Point(184, 8), 165, Color.FromArgb(80,20,20),  BtnEliminarDuplicados_Click!);
+        btnDetectarDuplicados = Btn("🔍 Detectar duplicados", new Point(10, 11), 165,
+            Color.FromArgb(75, 55, 10), BtnDetectarDuplicados_Click!);
+
+        btnEliminarDuplicados = Btn("🗑 Eliminar duplicados", new Point(184, 11), 165,
+            Color.FromArgb(80, 20, 20), BtnEliminarDuplicados_Click!);
         btnEliminarDuplicados.Enabled = false;
+
         lblProcInfo = new Label
         {
-            Text     = "Selecciona una operación.",
-            AutoSize = false,
-            Size     = new Size(420, 26),
-            Location = new Point(360, 12),
-            ForeColor= fgYellow,
-            Font     = new Font("Segoe UI", 9f, FontStyle.Bold)
+            Text      = "Selecciona una operación.",
+            AutoSize  = false,
+            Size      = new Size(900, 22),
+            Location  = new Point(362, 14),
+            ForeColor = fgYellow,
+            Font      = new Font("Segoe UI", 9f, FontStyle.Bold)
         };
 
-        var sepLinea = new Label { Location = new Point(10, 42), Size = new Size(700, 1), BackColor = Color.FromArgb(60,60,80) };
+        pnlDuplicados.Controls.AddRange(new Control[]
+            { btnDetectarDuplicados, btnEliminarDuplicados, lblProcInfo });
 
-        grpLinq = new GroupBox
+        // ── Separador A (entre paneles, 2 px) ────────────────────
+        var sepEntrePaneles = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 2,
+            BackColor = Color.FromArgb(55, 55, 80)
+        };
+
+        // ── Panel B: Bonus LINQ (58 px) ──────────────────────────
+        pnlLinqArea = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 58,
+            BackColor = Color.FromArgb(20, 20, 34),
+        };
+
+        // Borde superior cyan para delinearlo visualmente
+        var bordeLinqTop = new Panel
+        {
+            Dock      = DockStyle.Top,
+            Height    = 2,
+            BackColor = Color.FromArgb(0, 140, 160)   // cyan oscuro
+        };
+
+        // Borde inferior cyan (separa el panel del DataGridView)
+        var bordeLinqBot = new Panel
+        {
+            Dock      = DockStyle.Bottom,
+            Height    = 3,
+            BackColor = Color.FromArgb(0, 140, 160)
+        };
+
+        // Etiqueta de sección
+        var lblLinqTitulo = new Label
         {
             Text      = "⚡ Bonus LINQ",
-            Location  = new Point(10, 50),
-            Size      = new Size(620, 75),
+            AutoSize  = true,
+            Location  = new Point(10, 18),
             ForeColor = fgYellow,
-            BackColor = bgLight,
-            Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+            Font      = new Font("Segoe UI", 9f, FontStyle.Bold)
         };
 
-        lblLinqFiltro  = Lbl("Categoría:", new Point(8, 22), fgCyan);
-        txtLinqFiltro  = Txt(new Point(78, 19), 140, bgDark, fgWhite);
-        btnLinqWhere   = Btn(".Where()",   new Point(228, 18), 95, accentBlue,               BtnLinqWhere_Click!);
-        btnLinqGroupBy = Btn(".GroupBy()", new Point(330, 18), 95, Color.FromArgb(30,75,30),  BtnLinqGroupBy_Click!);
-        btnLinqOrderBy = Btn(".OrderBy()", new Point(432, 18), 95, Color.FromArgb(55,35,85),  BtnLinqOrderBy_Click!);
-        grpLinq.Controls.AddRange(new Control[] { lblLinqFiltro, txtLinqFiltro, btnLinqWhere, btnLinqGroupBy, btnLinqOrderBy });
+        // Selector de campo (ahora incluye ID)
+        var lblCampoLinq = Lbl("Campo:", new Point(130, 19), fgCyan);
+        cmbLinqCampo = Cmb(new Point(183, 15), 115, bgDark, fgWhite,
+            new object[] { "Categoría", "Nombre", "Fuente", "ID" }, 0);
 
-        pnlProcTop.Controls.AddRange(new Control[] { btnDetectarDuplicados, btnEliminarDuplicados, lblProcInfo, sepLinea, grpLinq });
+        // Cuadro de búsqueda
+        var lblBuscarLinq = Lbl("Buscar:", new Point(307, 19), fgCyan);
+        txtLinqFiltro = Txt(new Point(360, 16), 150, bgDark, fgWhite);
+        txtLinqFiltro.Font = new Font("Consolas", 9f);
 
+        // Botones LINQ — centrados verticalmente en 58px: (58-26)/2 = 16
+        btnLinqWhere   = Btn(".Where()",   new Point(520, 16),  88, accentBlue,
+            BtnLinqWhere_Click!);
+        btnLinqGroupBy = Btn(".GroupBy()", new Point(615, 16),  88, Color.FromArgb(30, 75, 30),
+            BtnLinqGroupBy_Click!);
+        btnLinqOrderBy = Btn(".OrderBy()", new Point(710, 16),  88, Color.FromArgb(55, 35, 85),
+            BtnLinqOrderBy_Click!);
+        btnLinqLimpiar = Btn("✖ Limpiar",  new Point(805, 16),  78, Color.FromArgb(70, 25, 25),
+            BtnLinqLimpiar_Click!);
+
+        pnlLinqArea.Controls.AddRange(new Control[]
+        {
+            bordeLinqTop, bordeLinqBot,
+            lblLinqTitulo, lblCampoLinq, cmbLinqCampo,
+            lblBuscarLinq, txtLinqFiltro,
+            btnLinqWhere, btnLinqGroupBy, btnLinqOrderBy, btnLinqLimpiar
+        });
+
+        // ── DataGridView (ocupa todo el espacio restante) ─────────
         dgvProcesamiento = new DataGridView { Dock = DockStyle.Fill };
-        tabProcesamiento.Controls.Add(dgvProcesamiento);
-        tabProcesamiento.Controls.Add(pnlProcTop);
+
+        // IMPORTANTE – orden de Controls.Add:
+        // WinForms doca los controles en z-order inverso (el último añadido queda arriba).
+        // Fill siempre ocupa el espacio que dejan los Top.
+        tabProcesamiento.Controls.Add(dgvProcesamiento);    // Fill  → va al fondo
+        tabProcesamiento.Controls.Add(pnlLinqArea);          // Top   → segundo desde arriba
+        tabProcesamiento.Controls.Add(sepEntrePaneles);      // Top   → separador entre paneles
+        tabProcesamiento.Controls.Add(pnlDuplicados);        // Top   → primero desde arriba
 
         // ── Ensamblar ────────────────────────────────────────────
         Controls.Add(splitMain);
