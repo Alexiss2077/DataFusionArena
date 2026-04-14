@@ -75,157 +75,142 @@ public partial class MainForm : Form
         chartMain.Legends.Clear();
         chartMain.Titles.Clear();
 
-        // ── Fondo del control ────────────────────────────────────
-        chartMain.BackColor        = Color.FromArgb(18, 18, 28);
-        chartMain.BorderlineColor  = Color.FromArgb(42, 42, 60);
+        chartMain.BackColor = Color.FromArgb(28, 28, 42);
 
-        // ── Área de gráfica ──────────────────────────────────────
+        // ── Área de gráfica — sin gradiente (causa crash en prerelease) ──
         var area = new ChartArea("AreaPrincipal");
-
-        // Fondo del área
-        area.BackColor         = Color.FromArgb(28, 28, 42);
-        area.BackSecondaryColor= Color.FromArgb(22, 22, 36);
-        area.BackGradientStyle = GradientStyle.TopBottom;
-        area.BorderColor       = Color.FromArgb(42, 42, 60);
-        area.BorderWidth       = 1;
-
-        // Eje X
-        area.AxisX.LabelStyle.ForeColor   = Color.FromArgb(180, 180, 200);
-        area.AxisX.LabelStyle.Font        = new Font("Segoe UI", 8f);
-        area.AxisX.LabelStyle.Angle       = -35;
-        area.AxisX.MajorGrid.LineColor    = Color.FromArgb(45, 45, 65);
-        area.AxisX.LineColor              = Color.FromArgb(60, 60, 80);
-        area.AxisX.TitleFont              = new Font("Segoe UI", 9f, FontStyle.Bold);
-        area.AxisX.TitleForeColor         = Color.FromArgb(0, 200, 220);
-
-        // Eje Y
-        area.AxisY.LabelStyle.ForeColor   = Color.FromArgb(180, 180, 200);
-        area.AxisY.LabelStyle.Font        = new Font("Segoe UI", 8f);
-        area.AxisY.MajorGrid.LineColor    = Color.FromArgb(45, 45, 65);
-        area.AxisY.LineColor              = Color.FromArgb(60, 60, 80);
-        area.AxisY.TitleFont              = new Font("Segoe UI", 9f, FontStyle.Bold);
-        area.AxisY.TitleForeColor         = Color.FromArgb(0, 200, 220);
-
+        area.BackColor            = Color.FromArgb(28, 28, 42);
+        area.BorderColor          = Color.FromArgb(60, 60, 80);
+        area.BorderWidth          = 1;
+        area.AxisX.LabelStyle.ForeColor = Color.FromArgb(180, 180, 200);
+        area.AxisX.LabelStyle.Font      = new Font("Segoe UI", 8f);
+        area.AxisX.MajorGrid.LineColor  = Color.FromArgb(50, 50, 70);
+        area.AxisX.LineColor            = Color.FromArgb(60, 60, 80);
+        area.AxisY.LabelStyle.ForeColor = Color.FromArgb(180, 180, 200);
+        area.AxisY.LabelStyle.Font      = new Font("Segoe UI", 8f);
+        area.AxisY.MajorGrid.LineColor  = Color.FromArgb(50, 50, 70);
+        area.AxisY.LineColor            = Color.FromArgb(60, 60, 80);
         chartMain.ChartAreas.Add(area);
 
         // ── Leyenda ──────────────────────────────────────────────
         var leyenda = new Legend("Leyenda")
         {
-            BackColor  = Color.FromArgb(28, 28, 42),
-            ForeColor  = Color.FromArgb(200, 200, 220),
-            Font       = new Font("Segoe UI", 8.5f),
-            BorderColor= Color.FromArgb(42, 42, 60),
-            IsDockedInsideChartArea = false,
-            Docking    = Docking.Right
+            BackColor = Color.FromArgb(28, 28, 42),
+            ForeColor = Color.FromArgb(200, 200, 220),
+            Font      = new Font("Segoe UI", 8.5f),
+            Docking   = Docking.Right,
+            IsDockedInsideChartArea = false
         };
         chartMain.Legends.Add(leyenda);
 
-        // ── Título por defecto ───────────────────────────────────
-        var titulo = new Title("Carga datos para ver la gráfica")
+        chartMain.Titles.Add(new Title("Carga datos para ver la gráfica")
         {
             ForeColor = Color.FromArgb(120, 120, 150),
-            Font      = new Font("Segoe UI", 13f, FontStyle.Italic),
+            Font      = new Font("Segoe UI", 12f),
             Docking   = Docking.Top
-        };
-        chartMain.Titles.Add(titulo);
+        });
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  ACTUALIZAR CHART (llamado desde eventos)
-    // ════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Reconstruye las series del Chart según el tipo seleccionado y los datos actuales.
-    /// </summary>
     private void ActualizarChart()
     {
-        var fuente = _datosBase.Count > 0 ? _datosBase : _datos;
-
-        chartMain.Series.Clear();
-        chartMain.Titles.Clear();
-        chartMain.ChartAreas[0].AxisX.IsLogarithmic = false;
-
-        if (fuente.Count == 0)
+        try
         {
-            chartMain.Titles.Add(new Title("Sin datos – carga archivos primero")
+            // Limpiar estado anterior completamente
+            chartMain.Series.Clear();
+            chartMain.Titles.Clear();
+
+            var fuente = _datosBase.Count > 0 ? _datosBase : _datos;
+
+            if (fuente.Count == 0)
             {
-                ForeColor = Color.FromArgb(120, 120, 150),
-                Font      = new Font("Segoe UI", 13f, FontStyle.Italic),
-                Docking   = Docking.Top
-            });
-            return;
+                chartMain.Titles.Add(new Title("Sin datos – carga archivos primero")
+                {
+                    ForeColor = Color.FromArgb(120, 120, 150),
+                    Font      = new Font("Segoe UI", 12f),
+                    Docking   = Docking.Top
+                });
+                return;
+            }
+
+            var stats = DataProcessor
+                .CalcularEstadisticas(fuente)
+                .Values
+                .OrderByDescending(s => s.SumaValores)
+                .Take(10)
+                .ToList();
+
+            if (stats.Count == 0) return;
+
+            // Resetear ejes antes de cada tipo (Pie los deshabilita, Column/Bar los necesita)
+            chartMain.ChartAreas[0].AxisX.Enabled = AxisEnabled.Auto;
+            chartMain.ChartAreas[0].AxisY.Enabled = AxisEnabled.Auto;
+            chartMain.ChartAreas[0].AxisX.LabelStyle.Angle = -40;
+
+            string tipo = cmbTipoGrafica.Text;
+            switch (tipo)
+            {
+                case "Columnas": ConfigurarChartColumnas(stats); break;
+                case "Barras":   ConfigurarChartBarras(stats);   break;
+                case "Pastel":   ConfigurarChartPastel(stats);   break;
+            }
         }
-
-        // Calcular estadísticas agrupadas por categoría
-        var stats = DataProcessor
-            .CalcularEstadisticas(fuente)
-            .Values
-            .OrderByDescending(s => s.SumaValores)
-            .Take(12)
-            .ToList();
-
-        string tipo = cmbTipoGrafica.Text;
-
-        switch (tipo)
+        catch (Exception ex)
         {
-            case "Columnas": ConfigurarChartColumnas(stats); break;
-            case "Barras":   ConfigurarChartBarras(stats);   break;
-            case "Pastel":   ConfigurarChartPastel(stats);   break;
+            try
+            {
+                chartMain.Series.Clear();
+                chartMain.Titles.Clear();
+                chartMain.Titles.Add(new Title($"Error: {ex.Message}")
+                {
+                    ForeColor = Color.OrangeRed,
+                    Font      = new Font("Segoe UI", 9f),
+                    Docking   = Docking.Top
+                });
+            }
+            catch { /* ignorar */ }
         }
     }
 
     // ────────────────────────────────────────────────────────────
     //  Gráfica de Columnas (vertical)
     // ────────────────────────────────────────────────────────────
+    // ────────────────────────────────────────────────────────────
+    //  Gráfica de Columnas (vertical) — una serie, un punto por categoría
+    // ────────────────────────────────────────────────────────────
     private void ConfigurarChartColumnas(List<EstadisticasCategoria> stats)
     {
-        // Título
-        chartMain.Titles.Add(new Title("Valor Total por Categoría – Gráfica de Columnas")
+        chartMain.Titles.Add(new Title("Valor Total por Categoría – Columnas")
         {
             ForeColor = Color.FromArgb(0, 200, 220),
             Font      = new Font("Segoe UI", 11f, FontStyle.Bold),
             Docking   = Docking.Top
         });
 
-        // Configurar ejes para columnas verticales
         var area = chartMain.ChartAreas[0];
-        area.AxisX.Title = "Categoría";
-        area.AxisY.Title = "Valor Total";
-        area.AxisX.LabelStyle.Angle = -38;
+        area.AxisX.LabelStyle.Angle  = -40;
         area.AxisY.LabelStyle.Format = "N0";
         chartMain.Legends[0].Enabled = false;
 
-        // Paleta de colores
-        var colores = PaletaColores();
+        // Una única serie con un punto por categoría
+        var ser = new Series("Datos")
+        {
+            ChartType           = SeriesChartType.Column,
+            ChartArea           = "AreaPrincipal",
+            IsValueShownAsLabel = true,
+            LabelForeColor      = Color.White,
+            LabelFormat         = "N0",
+        };
 
-        // Una serie por categoría para poder colorear cada barra diferente
+        var colores = PaletaColores();
         for (int i = 0; i < stats.Count; i++)
         {
             var s   = stats[i];
-            var ser = new Series(s.Categoria)
-            {
-                ChartType  = SeriesChartType.Column,
-                ChartArea  = "AreaPrincipal",
-                Color      = colores[i % colores.Length],
-                BorderColor= Color.FromArgb(10, 10, 20),
-                BorderWidth= 1,
-                // Etiqueta encima de cada barra
-                IsValueShownAsLabel = true,
-                LabelForeColor      = Color.FromArgb(230, 230, 240),
-                LabelFormat         = "N0",
-                Font                = new Font("Segoe UI", 7.5f, FontStyle.Bold),
-                LegendText          = s.Categoria
-            };
-
-            // Esquinas redondeadas simuladas con CustomProperties
-            ser["DrawingStyle"] = "Cylinder";
-            ser.Points.AddXY(s.Categoria, s.SumaValores);
-            ser.Points[0].ToolTip =
-                $"{s.Categoria}\nTotal: {s.SumaValores:N2}\n" +
-                $"Cant.: {s.Cantidad}\nProm.: {s.Promedio:N2}";
-
-            chartMain.Series.Add(ser);
+            int idx = ser.Points.AddXY(s.Categoria, s.SumaValores);
+            ser.Points[idx].Color   = colores[i % colores.Length];
+            ser.Points[idx].ToolTip = $"{s.Categoria}\nTotal: {s.SumaValores:N2}\nCant.: {s.Cantidad}";
         }
+
+        chartMain.Series.Add(ser);
     }
 
     // ────────────────────────────────────────────────────────────
@@ -233,7 +218,7 @@ public partial class MainForm : Form
     // ────────────────────────────────────────────────────────────
     private void ConfigurarChartBarras(List<EstadisticasCategoria> stats)
     {
-        chartMain.Titles.Add(new Title("Valor Total por Categoría – Gráfica de Barras")
+        chartMain.Titles.Add(new Title("Valor Total por Categoría – Barras")
         {
             ForeColor = Color.FromArgb(255, 200, 50),
             Font      = new Font("Segoe UI", 11f, FontStyle.Bold),
@@ -241,43 +226,37 @@ public partial class MainForm : Form
         });
 
         var area = chartMain.ChartAreas[0];
-        area.AxisX.Title = "Categoría";
-        area.AxisY.Title = "Valor Total";
-        area.AxisX.LabelStyle.Angle = 0;   // horizontal → etiquetas rectas
+        area.AxisX.LabelStyle.Angle  = 0;
         area.AxisY.LabelStyle.Format = "N0";
         chartMain.Legends[0].Enabled = false;
 
-        var colores = PaletaColores();
+        var ser = new Series("Datos")
+        {
+            ChartType           = SeriesChartType.Bar,
+            ChartArea           = "AreaPrincipal",
+            IsValueShownAsLabel = true,
+            LabelForeColor      = Color.White,
+            LabelFormat         = "N0",
+        };
 
+        var colores = PaletaColores();
         for (int i = 0; i < stats.Count; i++)
         {
             var s   = stats[i];
-            var ser = new Series(s.Categoria)
-            {
-                ChartType           = SeriesChartType.Bar,   // ← Bar = horizontal
-                ChartArea           = "AreaPrincipal",
-                Color               = colores[i % colores.Length],
-                BorderColor         = Color.FromArgb(10, 10, 20),
-                BorderWidth         = 1,
-                IsValueShownAsLabel = true,
-                LabelForeColor      = Color.FromArgb(230, 230, 240),
-                LabelFormat         = "N0",
-                Font                = new Font("Segoe UI", 7.5f, FontStyle.Bold),
-            };
-            ser["DrawingStyle"] = "Cylinder";
-            ser.Points.AddXY(s.Categoria, s.SumaValores);
-            ser.Points[0].ToolTip =
-                $"{s.Categoria}\nTotal: {s.SumaValores:N2}\nCant.: {s.Cantidad}";
-            chartMain.Series.Add(ser);
+            int idx = ser.Points.AddXY(s.Categoria, s.SumaValores);
+            ser.Points[idx].Color   = colores[i % colores.Length];
+            ser.Points[idx].ToolTip = $"{s.Categoria}\nTotal: {s.SumaValores:N2}\nCant.: {s.Cantidad}";
         }
+
+        chartMain.Series.Add(ser);
     }
 
     // ────────────────────────────────────────────────────────────
-    //  Gráfica de Pastel (Pie)
+    //  Gráfica de Pastel (Pie simple — sin Doughnut ni CustomProperties)
     // ────────────────────────────────────────────────────────────
     private void ConfigurarChartPastel(List<EstadisticasCategoria> stats)
     {
-        chartMain.Titles.Add(new Title("Distribución por Categoría – Gráfica de Pastel")
+        chartMain.Titles.Add(new Title("Distribución por Categoría – Pastel")
         {
             ForeColor = Color.FromArgb(0, 224, 128),
             Font      = new Font("Segoe UI", 11f, FontStyle.Bold),
@@ -285,42 +264,31 @@ public partial class MainForm : Form
         });
 
         // El Pie no usa ejes
-        chartMain.ChartAreas[0].AxisX.Title = "";
-        chartMain.ChartAreas[0].AxisY.Title = "";
-        chartMain.Legends[0].Enabled        = true;
+        chartMain.ChartAreas[0].AxisX.Enabled = AxisEnabled.False;
+        chartMain.ChartAreas[0].AxisY.Enabled = AxisEnabled.False;
+        chartMain.Legends[0].Enabled          = true;
 
-        var ser = new Series("Distribución")
+        double total = stats.Sum(s => s.SumaValores);
+        if (total <= 0) return;
+
+        var ser = new Series("Datos")
         {
-            ChartType = SeriesChartType.Doughnut,   // Doughnut = pastel con hueco central
-            ChartArea = "AreaPrincipal",
-            Legend    = "Leyenda",
-            // Mostrar porcentaje dentro de cada sector
+            ChartType           = SeriesChartType.Pie,
+            ChartArea           = "AreaPrincipal",
+            Legend              = "Leyenda",
             IsValueShownAsLabel = true,
             LabelFormat         = "P1",
             LabelForeColor      = Color.White,
-            Font                = new Font("Segoe UI", 8f, FontStyle.Bold),
         };
-        ser["DoughnutRadius"]       = "35";   // tamaño del hueco central (%)
-        ser["PieLabelStyle"]        = "Outside";
-        ser["PieLineColor"]         = "DimGray";
-        ser["CollectedLabel"]       = "Otros";
-        ser["CollectedColor"]       = "Gray";
-        ser["CollectedThreshold"]   = "2";    // sectores < 2% se agrupan en "Otros"
 
         var colores = PaletaColores();
-        double total = stats.Sum(s => s.SumaValores);
-
         for (int i = 0; i < stats.Count; i++)
         {
-            var s = stats[i];
+            var s   = stats[i];
             int idx = ser.Points.AddXY(s.Categoria, s.SumaValores);
             ser.Points[idx].Color      = colores[i % colores.Length];
-            ser.Points[idx].LegendText = $"{s.Categoria} ({s.SumaValores / total:P1})";
-            ser.Points[idx].ToolTip    =
-                $"{s.Categoria}\nTotal: {s.SumaValores:N2}\n" +
-                $"Porcentaje: {s.SumaValores / total:P2}";
-            // Explotar ligeramente el sector mayor
-            if (i == 0) ser.Points[idx]["Exploded"] = "true";
+            ser.Points[idx].LegendText = $"{s.Categoria}  {s.SumaValores / total:P1}";
+            ser.Points[idx].ToolTip    = $"{s.Categoria}\nTotal: {s.SumaValores:N2}\n{s.SumaValores / total:P2}";
         }
 
         chartMain.Series.Add(ser);

@@ -1,6 +1,6 @@
-using System.Windows.Forms.DataVisualization.Charting;
-
 namespace DataFusionArena.WinForms;
+
+using System.Windows.Forms.DataVisualization.Charting;
 
 partial class MainForm
 {
@@ -308,40 +308,66 @@ partial class MainForm
             BackColor = Color.FromArgb(20, 20, 34),
         };
 
-        // ── Mapa de coordenadas X (cada elemento respeta margen de 20px) ──
-        // x=10   "⚡ LINQ"  (~75px)
-        // x=100  "Campo:"  (~48px)
-        // x=156  ComboBox  (120px) → termina en 276
-        // x=296  "Buscar:" (~50px)
-        // x=354  TextBox   (175px) → termina en 529
-        // x=549  .Where()  ( 88px) → termina en 637
-        // x=643  .GroupBy()(  88px) → termina en 731
-        // x=737  .OrderBy()( 88px) → termina en 825
-        // x=831  ✖ Limpiar ( 78px)
+        // ── Anchos fijos generosos (medidos con holgura extra) ────────────
+        // lblTitulo  x=10  w=100 → fin=110  ("⚡ LINQ" en bold ~85px + 15 margen)
+        // gap 10
+        // lblCampo   x=120 w=65  → fin=185  ("Campo:" en 9pt ~55px + 10 margen)
+        // gap 5
+        // ComboBox   x=190 w=120 → fin=310
+        // gap 20
+        // lblBuscar  x=330 w=65  → fin=395  ("Buscar:" en 9pt ~58px + 7 margen)
+        // gap 5
+        // TextBox    x=400 w=165 → fin=565
+        // gap 20
+        // .Where()   x=585 w=88  → fin=673
+        // .GroupBy() x=679 w=88  → fin=767
+        // .OrderBy() x=773 w=88  → fin=861
+        // ✖ Limpiar  x=867 w=78  → fin=945
 
         var lblLinqTitulo = new Label
         {
             Text      = "⚡ LINQ",
-            AutoSize  = true,
-            Location  = new Point(10, 19),
+            AutoSize  = false,
+            Size      = new Size(100, 22),
+            Location  = new Point(10, 18),
             ForeColor = fgYellow,
-            Font      = new Font("Segoe UI", 9f, FontStyle.Bold)
+            Font      = new Font("Segoe UI", 9f, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft
         };
-        var lblCampoLinq  = Lbl("Campo:",  new Point(100, 19), fgCyan);
-        cmbLinqCampo = Cmb(new Point(156, 15), 120, bgDark, fgWhite,
+
+        var lblCampoLinq = new Label
+        {
+            Text      = "Campo:",
+            AutoSize  = false,
+            Size      = new Size(65, 22),
+            Location  = new Point(120, 18),
+            ForeColor = fgCyan,
+            Font      = new Font("Segoe UI", 9f),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        cmbLinqCampo = Cmb(new Point(190, 15), 120, bgDark, fgWhite,
             new object[] { "Categoría", "Nombre", "Fuente", "ID" }, 0);
 
-        var lblBuscarLinq = Lbl("Buscar:", new Point(296, 19), fgCyan);
-        txtLinqFiltro = Txt(new Point(354, 15), 175, bgDark, fgWhite);
+        var lblBuscarLinq = new Label
+        {
+            Text      = "Buscar:",
+            AutoSize  = false,
+            Size      = new Size(65, 22),
+            Location  = new Point(330, 18),
+            ForeColor = fgCyan,
+            Font      = new Font("Segoe UI", 9f),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        txtLinqFiltro = Txt(new Point(400, 15), 165, bgDark, fgWhite);
         txtLinqFiltro.Font = new Font("Consolas", 9f);
 
-        btnLinqWhere   = Btn(".Where()",   new Point(549, 16),  88, accentBlue,
+        btnLinqWhere   = Btn(".Where()",   new Point(585, 16),  88, accentBlue,
             BtnLinqWhere_Click!);
-        btnLinqGroupBy = Btn(".GroupBy()", new Point(643, 16),  88, Color.FromArgb(30, 75, 30),
+        btnLinqGroupBy = Btn(".GroupBy()", new Point(679, 16),  88, Color.FromArgb(30, 75, 30),
             BtnLinqGroupBy_Click!);
-        btnLinqOrderBy = Btn(".OrderBy()", new Point(737, 16),  88, Color.FromArgb(55, 35, 85),
+        btnLinqOrderBy = Btn(".OrderBy()", new Point(773, 16),  88, Color.FromArgb(55, 35, 85),
             BtnLinqOrderBy_Click!);
-        btnLinqLimpiar = Btn("✖ Limpiar",  new Point(831, 16),  78, Color.FromArgb(70, 25, 25),
+        btnLinqLimpiar = Btn("✖ Limpiar",  new Point(867, 16),  78, Color.FromArgb(70, 25, 25),
             BtnLinqLimpiar_Click!);
 
         filaLinq.Controls.AddRange(new Control[]
