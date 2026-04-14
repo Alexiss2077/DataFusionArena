@@ -70,23 +70,32 @@ public static class DataProcessor
     // NIVEL 5 – Procesamiento SIN LINQ
     // ──────────────────────────────────────────────────────────────
 
-    /// <summary>Filtra la lista por campo y valor (sin LINQ).</summary>
+    /// <summary>
+    /// Filtra la lista por campo y valor (sin LINQ).
+    /// Soporta tanto las propiedades estándar de DataItem como cualquier clave de CamposExtra,
+    /// lo que permite filtrar por columnas de datasets personalizados (ej. "fuel_type", "brand").
+    /// </summary>
     public static List<DataItem> Filtrar(List<DataItem> datos, string campo, string valor)
     {
         var resultado = new List<DataItem>();
         string v = valor.ToLower();
+        string campoLow = campo.ToLower();
 
         for (int i = 0; i < datos.Count; i++)
         {
             var item = datos[i];
-            bool match = campo.ToLower() switch
+            bool match = campoLow switch
             {
-                "nombre"    => item.Nombre.ToLower().Contains(v),
+                "nombre" => item.Nombre.ToLower().Contains(v),
                 "categoria" => item.Categoria.ToLower().Contains(v),
-                "fuente"    => item.Fuente.ToLower().Contains(v),
-                "id"        => item.Id.ToString() == v,
-                "valor"     => item.Valor.ToString("F2").Contains(v),
-                _           => item.Nombre.ToLower().Contains(v) || item.Categoria.ToLower().Contains(v)
+                "fuente" => item.Fuente.ToLower().Contains(v),
+                "id" => item.Id.ToString() == v,
+                "valor" => item.Valor.ToString("F2").Contains(v),
+                "fecha" => item.Fecha.ToString("yyyy-MM-dd").Contains(v),
+                // Cualquier otro campo → buscar en CamposExtra; si no existe, fallback amplio
+                _ => item.CamposExtra.TryGetValue(campoLow, out var ev)
+                     ? ev.ToLower().Contains(v)
+                     : item.Nombre.ToLower().Contains(v) || item.Categoria.ToLower().Contains(v)
             };
             if (match) resultado.Add(item);
         }
@@ -229,28 +238,53 @@ public static class DataProcessor
         return i + 1;
     }
 
+    /// <summary>
+    /// Compara dos DataItems por el campo indicado.
+    /// Soporta propiedades estándar y cualquier campo en CamposExtra
+    /// (con comparación numérica automática cuando los valores son números).
+    /// </summary>
     private static int Comparar(DataItem a, DataItem b, string campo)
         => campo.ToLower() switch
         {
-            "valor"     => a.Valor.CompareTo(b.Valor),
-            "nombre"    => string.Compare(a.Nombre,    b.Nombre,    StringComparison.OrdinalIgnoreCase),
+            "valor" => a.Valor.CompareTo(b.Valor),
+            "nombre" => string.Compare(a.Nombre, b.Nombre, StringComparison.OrdinalIgnoreCase),
             "categoria" => string.Compare(a.Categoria, b.Categoria, StringComparison.OrdinalIgnoreCase),
-            "fecha"     => a.Fecha.CompareTo(b.Fecha),
-            "id"        => a.Id.CompareTo(b.Id),
-            _           => a.Id.CompareTo(b.Id)
+            "fecha" => a.Fecha.CompareTo(b.Fecha),
+            "id" => a.Id.CompareTo(b.Id),
+            // Cualquier campo desconocido → buscar en CamposExtra con comparación inteligente
+            _ => CompararCampoExtra(a, b, campo.ToLower())
         };
+
+    /// <summary>
+    /// Compara valores de CamposExtra: intenta comparación numérica primero
+    /// para que campos como "horsepower" o "mileage" se ordenen correctamente.
+    /// </summary>
+    private static int CompararCampoExtra(DataItem a, DataItem b, string clave)
+    {
+        var sa = a.CamposExtra.TryGetValue(clave, out var va) ? va : "";
+        var sb = b.CamposExtra.TryGetValue(clave, out var vb) ? vb : "";
+
+        // Intentar comparación numérica primero (evita que "9" > "180635")
+        if (double.TryParse(sa, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double da) &&
+            double.TryParse(sb, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double db))
+            return da.CompareTo(db);
+
+        return string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 // ──────────────────────────────────────────────────────────────
 /// <summary>Estadísticas acumuladas por categoría.</summary>
 public class EstadisticasCategoria
 {
-    public string Categoria    { get; set; } = "";
-    public int    Cantidad     { get; set; }
-    public double SumaValores  { get; set; }
-    public double Promedio     { get; set; }
-    public double ValorMaximo  { get; set; }
-    public double ValorMinimo  { get; set; }
+    public string Categoria { get; set; } = "";
+    public int Cantidad { get; set; }
+    public double SumaValores { get; set; }
+    public double Promedio { get; set; }
+    public double ValorMaximo { get; set; }
+    public double ValorMinimo { get; set; }
 
     public override string ToString()
         => $"{Categoria,-20} | Cant: {Cantidad,4} | Prom: {Promedio,9:F2} | Max: {ValorMaximo,9:F2} | Min: {ValorMinimo,9:F2}";

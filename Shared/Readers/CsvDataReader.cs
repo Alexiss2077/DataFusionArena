@@ -6,11 +6,26 @@ namespace DataFusionArena.Shared.Readers;
 /// <summary>
 /// Lee un archivo CSV y lo convierte a List&lt;DataItem&gt;.
 /// Detecta automáticamente el orden de columnas por encabezado.
-/// Si no encuentra columnas con nombres conocidos, usa fallback posicional
-/// (columna 0 → ID, columna 1 → nombre, columna 2 → categoría, etc.).
+/// Expone <see cref="UltimasColumnas"/> y <see cref="MapeoColumnas"/> para que la UI
+/// pueda mostrar las columnas en el orden original del archivo.
 /// </summary>
 public static class CsvDataReader
 {
+    // ── Metadatos del último archivo leído (para la UI) ──────────────────────
+    /// <summary>
+    /// Nombres de columna del último CSV leído, en el orden original del archivo
+    /// y con la capitalización original (ej. "Car_ID", "Fuel_Type").
+    /// </summary>
+    public static List<string> UltimasColumnas { get; private set; } = new();
+
+    /// <summary>
+    /// Mapeo de nombre-de-columna-lowercase → nombre-de-propiedad-DataItem.
+    /// Ej: "car_id" → "Id", "price" → "Valor", "brand" → "Nombre".
+    /// Las columnas que NO aparecen aquí son CamposExtra.
+    /// </summary>
+    public static Dictionary<string, string> MapeoColumnas { get; private set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public static List<DataItem> Leer(string rutaArchivo, char separador = ',')
     {
         var lista = new List<DataItem>();
@@ -44,6 +59,11 @@ public static class CsvDataReader
             for (int i = 0; i < encabezados.Length; i++)
                 mapa[encabezados[i]] = i;
 
+            // ── Guardar encabezados originales (con capitalización del archivo) ─
+            UltimasColumnas = lineas[0].Split(separador)
+                                       .Select(h => h.Trim().Replace("\"", ""))
+                                       .ToList();
+
             // Aliases conocidos
             int idxId = BuscarColumna(mapa, "id", "codigo", "code", "sku", "#");
             int idxNombre = BuscarColumna(mapa, "nombre", "name", "titulo", "title", "producto",
@@ -59,7 +79,6 @@ public static class CsvDataReader
                                           "fecha_registro", "created_at", "timestamp");
 
             // ── Fallback posicional si no se encontraron columnas ────────
-            // Asigna por posición ignorando las columnas ya mapeadas
             var mapeadas = new HashSet<int>(
                 new[] { idxId, idxNombre, idxCat, idxValor, idxFecha }.Where(x => x >= 0));
 
@@ -70,6 +89,14 @@ public static class CsvDataReader
             if (idxFecha < 0) idxFecha = SiguienteLibre(mapeadas, encabezados.Length, 0);
 
             Console.WriteLine($"[CSV] Columnas → ID:{idxId} Nombre:{idxNombre} Cat:{idxCat} Valor:{idxValor} Fecha:{idxFecha}");
+
+            // ── Publicar metadatos de mapeo para la UI ───────────────────
+            MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (idxId >= 0 && idxId < encabezados.Length) MapeoColumnas[encabezados[idxId]] = "Id";
+            if (idxNombre >= 0 && idxNombre < encabezados.Length) MapeoColumnas[encabezados[idxNombre]] = "Nombre";
+            if (idxCat >= 0 && idxCat < encabezados.Length) MapeoColumnas[encabezados[idxCat]] = "Categoria";
+            if (idxValor >= 0 && idxValor < encabezados.Length) MapeoColumnas[encabezados[idxValor]] = "Valor";
+            if (idxFecha >= 0 && idxFecha < encabezados.Length) MapeoColumnas[encabezados[idxFecha]] = "Fecha";
 
             // ── Leer registros ───────────────────────────────────────────
             for (int fila = 1; fila < lineas.Length; fila++)
@@ -86,7 +113,7 @@ public static class CsvDataReader
                     item.Valor = idxValor >= 0 ? ParseDouble(cols, idxValor) : 0;
                     item.Fecha = idxFecha >= 0 ? ParseFecha(cols, idxFecha) : DateTime.Now;
 
-                    // Columnas desconocidas → CamposExtra
+                    // Columnas desconocidas → CamposExtra (clave en lowercase)
                     var usadas = new HashSet<int> { idxId, idxNombre, idxCat, idxValor, idxFecha };
                     for (int c = 0; c < encabezados.Length; c++)
                     {
@@ -137,7 +164,6 @@ public static class CsvDataReader
         return -1;
     }
 
-    /// <summary>Devuelve el siguiente índice libre (no mapeado) en el rango dado.</summary>
     private static int SiguienteLibre(HashSet<int> mapeadas, int total, int desde)
     {
         for (int i = desde; i < total; i++)

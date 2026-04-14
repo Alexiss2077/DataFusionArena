@@ -44,7 +44,7 @@ class Program
  ██║  ██║██╔══██║   ██║   ██╔══██║    ██╔══╝  ██║   ██║╚════██║██║██║   ██║██║╚██╗██║
  ██████╔╝██║  ██║   ██║   ██║  ██║    ██║     ╚██████╔╝███████║██║╚██████╔╝██║ ╚████║
  ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝      ╚═════╝ ╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═══╝
-                         ARENA  –  Administración y Organización de Datos
+                         Administración y Organización de Datos
 ");
         Console.ResetColor();
     }
@@ -155,7 +155,7 @@ class Program
 
         if (!File.Exists(ruta))
         {
-            Color(ConsoleColor.Red, $"  ❌ Archivo no encontrado:\n     {ruta}");
+            Color(ConsoleColor.Red, $" Archivo no encontrado:\n     {ruta}");
             return;
         }
 
@@ -171,7 +171,7 @@ class Program
             case ".txt": CargarTxt(ruta); break;
             default:
                 Color(ConsoleColor.Red,
-                    $"  ❌ Extensión '{ext}' no soportada.\n" +
+                    $"  Extensión '{ext}' no soportada.\n" +
                     $"     Formatos aceptados: .json  .csv  .xml  .txt");
                 break;
         }
@@ -239,7 +239,7 @@ class Program
                 var datos = pg.LeerDatos();
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
-                Color(ConsoleColor.Green, $"  ✅ {datos.Count} registros cargados desde PostgreSQL.");
+                Color(ConsoleColor.Green, $"   {datos.Count} registros cargados desde PostgreSQL.");
             }
             else
                 Color(ConsoleColor.Red, $"  ❌ {msg}");
@@ -266,7 +266,7 @@ class Program
                 var datos = md.LeerDatos();
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
-                Color(ConsoleColor.Green, $"  ✅ {datos.Count} registros cargados desde MariaDB.");
+                Color(ConsoleColor.Green, $"   {datos.Count} registros cargados desde MariaDB.");
             }
             else
                 Color(ConsoleColor.Red, $"  ❌ {msg}");
