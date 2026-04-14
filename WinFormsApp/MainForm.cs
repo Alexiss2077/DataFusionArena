@@ -28,19 +28,14 @@ public partial class MainForm : Form
         AppDomain.CurrentDomain.BaseDirectory, "SampleData");
 
     // ── Metadatos de columnas del dataset actual ─────────────────
-    // Cada entrada: (Display = nombre para mostrar, Clave = campo para filtrar/ordenar)
-    // Claves estándar: "id","nombre","categoria","valor","fecha","fuente"
-    // Claves extra: el nombre lowercase de la columna en CamposExtra (ej. "fuel_type")
     private List<(string Display, string Clave)> _infoColumnas = new()
     {
         ("ID","id"), ("Nombre","nombre"), ("Categoría","categoria"),
         ("Valor","valor"), ("Fecha","fecha"), ("Fuente","fuente")
     };
 
-    // Tipo del último archivo cargado individualmente ("csv","json","xml","txt","")
     private string _ultimoTipoCargado = "";
 
-    // Columnas fijas que se usan cuando no hay CSV o cuando la carga es mixta
     private static readonly List<(string Display, string Clave)> _colsDefault = new()
     {
         ("ID","id"), ("Nombre","nombre"), ("Categoría","categoria"),
@@ -79,21 +74,17 @@ public partial class MainForm : Form
     //  GESTIÓN DE COLUMNAS – detección automática
     // ════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// Traduce el nombre de columna mostrado en un ComboBox
-    /// a la clave que entiende DataProcessor.Filtrar / Ordenar.
-    /// </summary>
     private string TraducirClave(string display)
     {
         foreach (var (d, c) in _infoColumnas)
             if (string.Equals(d, display, StringComparison.OrdinalIgnoreCase))
                 return c;
-        return display.ToLower();   // fallback: usar tal cual (CamposExtra)
+        return display.ToLower();
     }
 
     /// <summary>
-    /// Reconstruye _infoColumnas según el tipo del último archivo cargado
-    /// y los datos actualmente en memoria.
+    /// Reconstruye _infoColumnas según el tipo del último origen cargado.
+    /// Soporta CSV, PostgreSQL, MariaDB y modo estándar (mixto/archivos).
     /// </summary>
     private void ReconstruirInfoColumnas()
     {
@@ -101,82 +92,117 @@ public partial class MainForm : Form
 
         bool usarCsv = _ultimoTipoCargado == "csv" &&
                        CsvDataReader.UltimasColumnas.Count > 0;
+        bool usarPg = _ultimoTipoCargado == "postgresql" &&
+                       (_lastPgConnector?.UltimasColumnas.Count ?? 0) > 0;
+        bool usarMd = _ultimoTipoCargado == "mariadb" &&
+                       (_lastMdConnector?.UltimasColumnas.Count ?? 0) > 0;
 
         if (usarCsv)
         {
-            // ── Usar el orden original del CSV ────────────────────
-            var originals = CsvDataReader.UltimasColumnas;  // capitalización original
-            var mapeo = CsvDataReader.MapeoColumnas;    // lowercase→propiedad
+            // ── Orden original del CSV con capitalización del archivo ──
+            var originals = CsvDataReader.UltimasColumnas;
+            var mapeo = CsvDataReader.MapeoColumnas;
 
             foreach (var header in originals)
             {
                 if (mapeo.TryGetValue(header, out var prop))
-                    _infoColumnas.Add((header, prop.ToLower())); // ej. ("Brand","nombre")
+                    _infoColumnas.Add((header, prop.ToLower()));
                 else
-                    _infoColumnas.Add((header, header.ToLowerInvariant())); // CamposExtra
+                    _infoColumnas.Add((header, header.ToLowerInvariant()));
             }
 
-            // Fuente siempre al final (nunca viene del CSV)
             _infoColumnas.Add(("Fuente", "fuente"));
 
-            // Agregar cualquier CamposExtra adicional de otras fuentes mezcladas
             var yaExisten = new HashSet<string>(
                 _infoColumnas.Select(c => c.Clave), StringComparer.OrdinalIgnoreCase);
 
-            var extrasAdic = _datos
+            foreach (var k in _datos
                 .SelectMany(d => d.CamposExtra.Keys)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Where(k => !yaExisten.Contains(k))
-                .OrderBy(k => k);
-
-            foreach (var k in extrasAdic)
+                .OrderBy(k => k))
                 _infoColumnas.Add((k, k));
+        }
+        else if (usarPg)
+        {
+            // ── Orden y nombres originales de la tabla PostgreSQL ──────
+            BuildInfoColumnasFromConnector(
+                _lastPgConnector!.UltimasColumnas,
+                _lastPgConnector.MapeoColumnas);
+        }
+        else if (usarMd)
+        {
+            // ── Orden y nombres originales de la tabla MariaDB ─────────
+            BuildInfoColumnasFromConnector(
+                _lastMdConnector!.UltimasColumnas,
+                _lastMdConnector.MapeoColumnas);
         }
         else
         {
-            // ── Columnas estándar + extras en orden alfabético ────
+            // ── Columnas estándar + extras en orden alfabético ─────────
             foreach (var col in _colsDefault)
                 _infoColumnas.Add(col);
 
-            var extraKeys = _datos
+            foreach (var k in _datos
                 .SelectMany(d => d.CamposExtra.Keys)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(k => k);
-
-            foreach (var k in extraKeys)
+                .OrderBy(k => k))
                 _infoColumnas.Add((k, k.ToLower()));
         }
     }
 
     /// <summary>
-    /// Actualiza los tres ComboBox de filtro/orden/LINQ con los
-    /// nombres de columna detectados en el dataset actual.
-    /// Conserva la selección anterior si la columna todavía existe.
+    /// Construye _infoColumnas usando los metadatos expuestos por un conector de BD.
+    /// Conserva el orden original de las columnas de la tabla y agrega Fuente al final.
     /// </summary>
+    private void BuildInfoColumnasFromConnector(
+        List<string> columnas,
+        Dictionary<string, string> mapeo)
+    {
+        foreach (var col in columnas)
+        {
+            if (mapeo.TryGetValue(col, out var prop))
+                _infoColumnas.Add((col, prop.ToLower()));    // columna mapeada a propiedad estándar
+            else
+                _infoColumnas.Add((col, col.ToLowerInvariant())); // columna en CamposExtra
+        }
+
+        var yaExisten = new HashSet<string>(
+            _infoColumnas.Select(c => c.Clave), StringComparer.OrdinalIgnoreCase);
+
+        if (!yaExisten.Contains("fuente"))
+            _infoColumnas.Add(("Fuente", "fuente"));
+
+        // Si hay otras fuentes cargadas (archivos + BD mezclados), agregar sus extras al final
+        foreach (var k in _datos
+            .SelectMany(d => d.CamposExtra.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(k => !yaExisten.Contains(k))
+            .OrderBy(k => k))
+        {
+            _infoColumnas.Add((k, k.ToLowerInvariant()));
+            yaExisten.Add(k);
+        }
+    }
+
     private void RefrescarComboboxes()
     {
         var items = _infoColumnas.Select(c => c.Display).Distinct().ToArray<object>();
 
-        // ── Combobox de búsqueda ──────────────────────────────────
         string prevFiltro = cmbCampoBusqueda.Text;
         cmbCampoBusqueda.Items.Clear();
         cmbCampoBusqueda.Items.AddRange(items);
         int idxF = cmbCampoBusqueda.FindStringExact(prevFiltro);
         cmbCampoBusqueda.SelectedIndex = idxF >= 0 ? idxF : 0;
 
-        // ── Combobox de orden ─────────────────────────────────────
         string prevOrden = cmbCampoOrden.Text;
         cmbCampoOrden.Items.Clear();
         cmbCampoOrden.Items.AddRange(items);
         int idxO = cmbCampoOrden.FindStringExact(prevOrden);
         if (idxO < 0)
-        {
-            // Intentar seleccionar automáticamente la columna de "valor"
             idxO = _infoColumnas.FindIndex(c => c.Clave == "valor");
-        }
         cmbCampoOrden.SelectedIndex = Math.Max(0, idxO);
 
-        // ── Combobox LINQ ─────────────────────────────────────────
         if (cmbLinqCampo != null)
         {
             string prevLinq = cmbLinqCampo.Text;
@@ -259,8 +285,7 @@ public partial class MainForm : Form
         await CargarArchivoAsync(Path.Combine(_dirDatos, "employees.xml"), "xml", silencioso: true);
         await CargarArchivoAsync(Path.Combine(_dirDatos, "records.txt"), "txt", silencioso: true);
 
-        // Carga mixta: no usar orden CSV específico
-        _ultimoTipoCargado = "";
+        _ultimoTipoCargado = "";   // carga mixta → columnas estándar
         ReconstruirInfoColumnas();
         RefrescarComboboxes();
 
@@ -321,10 +346,7 @@ public partial class MainForm : Form
         });
 
         DataProcessor.AgregarDatos(_datos, nuevos);
-
-        // Registrar tipo para que ActualizarTodoAsync use el orden correcto
         _ultimoTipoCargado = tipo;
-
         await ActualizarTodoAsync();
 
         if (!silencioso)
@@ -355,8 +377,10 @@ public partial class MainForm : Form
         pg.ProbarConexion(out string msg);
         ActualizarEstadoBarra("⏳ Cargando datos PostgreSQL...");
         var datos = await Task.Run(() => pg.LeerDatos());
+
         _lastPgConnector = pg;
-        _ultimoTipoCargado = "";        // BD → columnas estándar
+        // Mostrar columnas de PG solo si no hay también MariaDB conectada
+        _ultimoTipoCargado = _lastMdConnector == null ? "postgresql" : "";
         DataProcessor.AgregarDatos(_datos, datos);
         await ActualizarTodoAsync();
         ActualizarEstadoBarra($"✅ PostgreSQL: {datos.Count} registros. {msg}");
@@ -382,8 +406,10 @@ public partial class MainForm : Form
         md.ProbarConexion(out string msg);
         ActualizarEstadoBarra("⏳ Cargando datos MariaDB...");
         var datos = await Task.Run(() => md.LeerDatos());
+
         _lastMdConnector = md;
-        _ultimoTipoCargado = "";        // BD → columnas estándar
+        // Mostrar columnas de MariaDB solo si no hay también PostgreSQL conectado
+        _ultimoTipoCargado = _lastPgConnector == null ? "mariadb" : "";
         DataProcessor.AgregarDatos(_datos, datos);
         await ActualizarTodoAsync();
         ActualizarEstadoBarra($"✅ MariaDB: {datos.Count} registros. {msg}");
@@ -414,7 +440,11 @@ public partial class MainForm : Form
             DataProcessor.AgregarDatos(_datos, datos);
         }
 
-        _ultimoTipoCargado = "";
+        // Tras refresh, conservar las columnas del conector si hay uno solo
+        _ultimoTipoCargado = (_lastPgConnector != null && _lastMdConnector == null) ? "postgresql"
+                           : (_lastMdConnector != null && _lastPgConnector == null) ? "mariadb"
+                           : "";
+
         await ActualizarTodoAsync();
         ActualizarEstadoBarra($"✅ Datos actualizados. Total: {_datos.Count} registros.");
     }
@@ -564,11 +594,6 @@ public partial class MainForm : Form
     private static bool ContieneNorm(string texto, string busqueda)
         => Normalizar(texto).Contains(Normalizar(busqueda));
 
-    /// <summary>
-    /// LINQ .Where() con soporte total de columnas dinámicas:
-    /// traduce la selección del combobox a la clave correcta y
-    /// busca tanto en propiedades estándar como en CamposExtra.
-    /// </summary>
     private async void BtnLinqWhere_Click(object? sender, EventArgs e)
     {
         string busqueda = txtLinqFiltro.Text.Trim();
@@ -586,20 +611,17 @@ public partial class MainForm : Form
             {
                 "nombre" => ContieneNorm(d.Nombre, busqueda),
                 "fuente" => ContieneNorm(d.Fuente, busqueda),
-                "id" => int.TryParse(busqueda, out int idNum)
-                                   ? d.Id == idNum
-                                   : d.Id.ToString().Contains(busqueda),
+                "id" => int.TryParse(busqueda, out int idNum) ? d.Id == idNum
+                                : d.Id.ToString().Contains(busqueda),
                 "categoria" => ContieneNorm(d.Categoria, busqueda),
                 "valor" => d.Valor.ToString("F2").Contains(busqueda),
                 "fecha" => d.Fecha.ToString("yyyy-MM-dd").Contains(busqueda),
-                // Cualquier campo extra → buscar en CamposExtra
                 _ => d.CamposExtra.TryGetValue(clave, out var ev)
-                                   ? ContieneNorm(ev, busqueda)
-                                   : false
+                                ? ContieneNorm(ev, busqueda)
+                                : false
             }).ToList());
 
         await BindGridAsync(dgvProcesamiento, res, null);
-
         string icono = res.Count > 0 ? "✅" : "⚠ ";
         lblProcInfo.Text = res.Count > 0
             ? $"{icono} LINQ .Where({display}.Contains(\"{busqueda}\")) → {res.Count} registro(s)"
@@ -622,7 +644,6 @@ public partial class MainForm : Form
                     Fecha = DateTime.Now
                 }).ToList());
 
-        // Para resultados LINQ usar columnas estándar (datos sintéticos)
         await BindGridAsync(dgvProcesamiento, grupos, null, usarColsDefault: true);
         lblProcInfo.Text = $"✅ LINQ .GroupBy(Categoría) → {grupos.Count} grupo(s)  [ID = cantidad, Valor = promedio]";
         ActualizarEstadoBarra($"LINQ .GroupBy(): {grupos.Count} grupos distintos");
@@ -660,10 +681,8 @@ public partial class MainForm : Form
         _datosBase = GetDatosBase();
         _datosVista = new List<DataItem>(_datosBase);
 
-        // Reconstruir info de columnas con el tipo del último archivo cargado
         ReconstruirInfoColumnas();
         RefrescarComboboxes();
-
         ReconstruirCategorias();
 
         await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
@@ -736,12 +755,6 @@ public partial class MainForm : Form
     // ════════════════════════════════════════════════════════════
     //  BINDING CON DATATABLE (async, dinámico)
     // ════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Construye y enlaza un DataTable al DataGridView.
-    /// Si <paramref name="usarColsDefault"/> es true, ignora _infoColumnas y usa las
-    /// 6 columnas estándar (útil para resultados LINQ sintéticos como GroupBy).
-    /// </summary>
     private async Task BindGridAsync(
         DataGridView dgv,
         List<DataItem> items,
@@ -753,7 +766,6 @@ public partial class MainForm : Form
         bool limitado = items.Count > DISPLAY_LIMIT;
         var itemsDisplay = limitado ? items.Take(DISPLAY_LIMIT).ToList() : items;
 
-        // Tomar snapshot de _infoColumnas en el hilo UI antes de pasar a Task.Run
         var colInfos = usarColsDefault
             ? new List<(string, string)>(_colsDefault)
             : new List<(string, string)>(_infoColumnas);
@@ -778,10 +790,7 @@ public partial class MainForm : Form
         dgv.Columns.Clear();
         dgv.AutoGenerateColumns = false;
 
-        // Mapa de display → clave para determinar anchos
-        var claveMap = colInfos.ToDictionary(c => c.Display, c => c.Clave,
-                                             StringComparer.OrdinalIgnoreCase);
-        // Columna que debe auto-expandirse (la de "nombre")
+        var claveMap = colInfos.ToDictionary(c => c.Display, c => c.Clave, StringComparer.OrdinalIgnoreCase);
         string? nombreDisplay = colInfos.FirstOrDefault(c => c.Clave == "nombre").Display;
 
         foreach (DataColumn col in dt.Columns)
@@ -809,7 +818,6 @@ public partial class MainForm : Form
                 _ => 120
             };
 
-            // La columna de nombre se expande para aprovechar el espacio restante
             if (!string.IsNullOrEmpty(nombreDisplay) && col.ColumnName == nombreDisplay)
             {
                 dgvCol.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
@@ -831,7 +839,6 @@ public partial class MainForm : Form
                 : $"{totalReal:N0} registros";
     }
 
-    /// <summary>Colorea filas según la fuente del dato (columna "Fuente" siempre presente).</summary>
     private static void DgvCellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
     {
         if (e.RowIndex < 0) return;
@@ -858,10 +865,6 @@ public partial class MainForm : Form
         catch { /* ignorar */ }
     }
 
-    /// <summary>
-    /// Construye un DataTable con columnas en el orden de <paramref name="colInfos"/>.
-    /// Extrae valores de las propiedades estándar de DataItem o de CamposExtra según la clave.
-    /// </summary>
     private static DataTable BuildDataTable(
         List<DataItem> items,
         List<(string Display, string Clave)> colInfos)
@@ -893,7 +896,6 @@ public partial class MainForm : Form
                     "valor" => (object)item.Valor,
                     "fecha" => item.Fecha.ToString("yyyy-MM-dd"),
                     "fuente" => item.Fuente,
-                    // Cualquier otra clave → buscar en CamposExtra
                     _ => item.CamposExtra.TryGetValue(clave, out var v) ? v : ""
                 };
             }
@@ -1010,7 +1012,6 @@ public partial class MainForm : Form
         chartMain.Limpiar();
         lblContadorTodos.Text = "0 registros";
 
-        // Restaurar comboboxes a los valores por defecto
         _infoColumnas.Clear();
         foreach (var col in _colsDefault) _infoColumnas.Add(col);
         RefrescarComboboxes();
@@ -1058,7 +1059,7 @@ public class FormConexionBD : Form
         string cadenaDefault = motor == "PostgreSQL"
             ? "Host=localhost;Port=5432;Database=datafusion;Username=postgres;Password=TU_PASSWORD;"
             : "Server=localhost;Port=3306;Database=datafusion;User=root;Password=TU_PASSWORD;";
-        string tablaDefault = motor == "PostgreSQL" ? "videojuegos" : "felicidad_mundial";
+        string tablaDefault = motor == "PostgreSQL" ? "videojuegos" : "autos";
 
         var lblC = new Label { Text = "Cadena de conexión:", Location = new Point(15, 20), AutoSize = true, ForeColor = Color.Cyan };
         txtCadena = new TextBox { Location = new Point(15, 42), Width = 475, Text = cadenaDefault, BackColor = Color.FromArgb(45, 45, 65), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
