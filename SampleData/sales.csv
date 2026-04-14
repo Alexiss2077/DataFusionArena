@@ -1,0 +1,41 @@
+genre,rank,na_sales,nombre,publisher,ventas,fecha,platform,eu_sales,jp_sales,other_sales
+Sports,1,41.49,Wii Sports,Nintendo,82.74,2006-01-01,Wii,29.02,3.77,8.46
+Platform,2,29.08,Super Mario Bros.,Nintendo,40.24,1985-01-01,NES,3.58,6.81,0.77
+Racing,3,15.85,Mario Kart Wii,Nintendo,35.82,2008-01-01,Wii,12.88,3.79,3.31
+Sports,4,15.75,Wii Sports Resort,Nintendo,33.00,2009-01-01,Wii,11.01,3.28,2.96
+Role-Playing,5,11.27,Pokemon Red/Pokemon Blue,Nintendo,31.37,1996-01-01,GB,8.89,10.22,1.00
+Puzzle,6,23.20,Tetris,Nintendo,30.26,1989-01-01,GB,2.26,4.22,0.58
+Platform,7,11.38,New Super Mario Bros.,Nintendo,30.01,2006-01-01,DS,9.23,6.50,2.90
+Misc,8,14.03,Wii Play,Nintendo,29.02,2006-01-01,Wii,9.20,2.93,2.85
+Platform,9,14.59,New Super Mario Bros. Wii,Nintendo,28.62,2009-01-01,Wii,7.06,4.70,2.26
+Shooter,10,26.93,Duck Hunt,Nintendo,28.31,1984-01-01,NES,0.63,0.28,0.47
+Misc,11,15.00,Kinect Adventures!,Microsoft Game Studios,22.29,2010-01-01,X360,5.22,0.44,1.63
+Action,12,7.01,Grand Theft Auto V,Take-Two Interactive,21.40,2013-01-01,PS3,9.27,0.97,4.14
+Platform,13,12.78,Super Mario World,Nintendo,20.61,1990-01-01,SNES,3.75,3.54,0.55
+Sports,14,8.94,Wii Fit,Nintendo,22.72,2007-01-01,Wii,8.03,3.60,2.15
+Sports,15,9.09,Wii Fit Plus,Nintendo,21.99,2009-01-01,Wii,8.59,2.53,1.79
+Role-Playing,16,9.00,Pokemon Gold/Pokemon Silver,Nintendo,23.10,1999-01-01,GB,6.18,7.20,0.71
+Misc,17,4.75,Brain Age: Train Your Brain,Nintendo,20.22,2005-01-01,DS,9.14,4.16,2.17
+Action,18,9.43,Grand Theft Auto: San Andreas,Take-Two Interactive,20.81,2004-01-01,PS2,0.40,0.41,10.57
+Shooter,19,8.41,Call of Duty: Modern Warfare 3,Activision,14.76,2011-01-01,X360,4.56,0.31,1.48
+Racing,20,6.97,Gran Turismo 3: A-Spec,Sony Computer Entertainment,14.98,2001-01-01,PS2,5.10,1.87,0.51
+Shooter,21,9.63,Call of Duty: Black Ops,Activision,14.64,2010-01-01,X360,3.44,0.27,1.31
+Role-Playing,22,9.85,Pokemon Diamond/Pokemon Pearl,Nintendo,18.36,2006-01-01,DS,5.40,6.04,1.27
+Action,23,3.96,Grand Theft Auto IV,Take-Two Interactive,11.16,2008-01-01,PS3,6.20,0.91,2.09
+Role-Playing,24,6.42,Pokemon Ruby/Pokemon Sapphire,Nintendo,16.22,2002-01-01,GBA,4.23,5.00,0.57
+Racing,25,5.00,Mario Kart DS,Nintendo,9.83,2005-01-01,DS,6.50,2.40,1.33
+Sports,26,4.60,Wii Party,Nintendo,9.36,2010-01-01,Wii,3.38,2.50,1.88
+Platform,27,5.68,Super Mario 3D Land,Nintendo,10.68,2011-01-01,3DS,3.06,2.02,1.44
+Shooter,28,5.70,Call of Duty: Black Ops II,Activision,8.62,2012-01-01,X360,2.42,0.15,1.00
+Role-Playing,29,7.20,Pokemon X/Pokemon Y,Nintendo,16.04,2013-01-01,3DS,5.74,4.78,2.32
+Role-Playing,30,6.55,Pokemon Black/Pokemon White,Nintendo,15.32,2010-01-01,DS,4.64,5.57,0.57
+Action,31,4.05,Red Dead Redemption,Take-Two Interactive,9.97,2010-01-01,PS3,4.49,0.51,1.37
+Shooter,32,5.80,Halo 3,Microsoft Game Studios,9.81,2007-01-01,X360,2.76,0.10,0.78
+Platform,33,4.09,Super Mario Bros. 3,Nintendo,10.16,1988-01-01,NES,3.09,2.55,0.50
+Racing,34,4.69,Mario Kart 7,Nintendo,9.65,2011-01-01,3DS,3.25,1.92,0.83
+Action,35,4.25,Minecraft,Mojang,9.70,2013-01-01,PS3,3.72,1.46,0.95
+Shooter,36,5.38,Call of Duty: Ghosts,Activision,7.12,2013-01-01,X360,1.67,0.13,0.67
+Sports,37,3.80,FIFA 16,Electronic Arts,7.56,2015-01-01,PS4,2.93,0.21,0.91
+Action,38,2.96,Grand Theft Auto V,Take-Two Interactive,19.39,2013-01-01,X360,6.32,0.43,2.93
+Shooter,39,6.31,Halo: Reach,Microsoft Game Studios,8.94,2010-01-01,X360,2.23,0.06,0.35
+Role-Playing,40,5.98,Pokemon HeartGold/SoulSilver,Nintendo,12.72,2009-01-01,DS,3.45,3.73,0.58

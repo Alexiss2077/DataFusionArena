@@ -1,0 +1,28 @@
+# Fuente: World Athletics (worldathletics.org) - Récords Mundiales Masculinos
+# Datos oficiales verificados al 2023 | Formato: id|nombre|categoria|valor|fecha|pais|ciudad
+id|nombre|categoria|valor|fecha|pais|ciudad
+1|Usain Bolt|100m Planos|9.58|2009-08-16|Jamaica|Berlin
+2|Usain Bolt|200m Planos|19.19|2009-08-20|Jamaica|Berlin
+3|Wayde van Niekerk|400m Planos|43.03|2016-08-14|Sudafrica|Rio de Janeiro
+4|David Rudisha|800m|100.91|2012-08-09|Kenia|Londres
+5|Hicham El Guerrouj|1500m|206.00|1998-07-14|Marruecos|Roma
+6|Hicham El Guerrouj|Milla|223.13|1999-07-07|Marruecos|Roma
+7|Joshua Cheptegei|5000m|755.36|2020-08-14|Uganda|Monaco
+8|Joshua Cheptegei|10000m|1571.00|2020-10-07|Uganda|Valencia
+9|Kelvin Kiptum|Maraton|7235.00|2023-10-08|Kenia|Chicago
+10|Aries Merritt|110m Vallas|12.80|2012-09-07|USA|Bruselas
+11|Karsten Warholm|400m Vallas|45.94|2021-08-03|Noruega|Tokio
+12|Saif Saaeed Shaheen|3000m Steeplechase|473.63|2004-09-03|Qatar|Bruselas
+13|Javier Sotomayor|Salto de Altura|2.45|1993-07-27|Cuba|Salamanca
+14|Armand Duplantis|Salto con Garrocha|6.22|2023-03-05|Suecia|Glasgow
+15|Mike Powell|Salto de Longitud|8.95|1991-08-30|USA|Tokio
+16|Jonathan Edwards|Triple Salto|18.29|1995-08-07|Gran Bretana|Gothenburg
+17|Ryan Crouser|Lanzamiento de Bala|23.37|2023-06-27|USA|Los Angeles
+18|Jurgen Schult|Lanzamiento de Disco|74.08|1986-06-06|Alemania del Este|Neubrandenburg
+19|Yuriy Sedykh|Lanzamiento de Martillo|86.74|1986-08-30|URSS|Stuttgart
+20|Jan Zelezny|Lanzamiento de Jabalina|98.48|1996-05-25|Republica Checa|Jena
+21|Kevin Mayer|Decatlon|9126.00|2018-09-16|Francia|Talence
+22|Eliud Kipchoge|Maraton Sub-2h|7259.00|2019-10-12|Kenia|Viena
+23|Noah Lyles|200m Planos|19.31|2023-08-23|USA|Budapest
+24|Sifan Hassan|5000m Femenino|851.15|2023-08-23|Paises Bajos|Budapest
+25|Faith Kipyegon|1500m Femenino|225.92|2023-06-02|Kenia|Florencia
