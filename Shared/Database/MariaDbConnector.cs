@@ -20,7 +20,6 @@ public class MariaDbConnector
     public MariaDbConnector(string cadenaConexion, string tabla)
     { CadenaConexion = cadenaConexion; Tabla = tabla; }
 
-    // ── Paso 1: obtener nombres de columna (sin leer filas) ──────
     public List<string> ObtenerNombresColumnas()
     {
         var cols = new List<string>();
@@ -36,32 +35,34 @@ public class MariaDbConnector
         { Console.WriteLine($"[MariaDB] ObtenerNombresColumnas: {ex.Message}"); }
 
         UltimasColumnas = new List<string>(cols);
-        // Generar sugerencias automáticas SOLO para el diálogo
         ActualizarMapeoAutomatico(cols);
         _mapeoConfirmadoPorUsuario = false;
         return cols;
     }
 
-    // ── Paso 2: el usuario confirma el mapeo ─────────────────────
     public void SobreescribirMapeo(
         string colCategoria, string colValor,
         string colNombre, string colFecha)
     {
         MapeoColumnas.Clear();
-        // Siempre guardar id si existe
         var colId = UltimasColumnas.FirstOrDefault(c =>
             string.Equals(c, "id", StringComparison.OrdinalIgnoreCase));
         if (colId != null) MapeoColumnas[colId] = "id";
 
-        if (!string.IsNullOrEmpty(colCategoria)) MapeoColumnas[colCategoria] = "categoria";
-        if (!string.IsNullOrEmpty(colValor)) MapeoColumnas[colValor] = "valor";
-        if (!string.IsNullOrEmpty(colNombre)) MapeoColumnas[colNombre] = "nombre";
-        if (!string.IsNullOrEmpty(colFecha)) MapeoColumnas[colFecha] = "fecha";
+        void Asignar(string? columna, string rol)
+        {
+            if (string.IsNullOrWhiteSpace(columna)) return;
+            MapeoColumnas.TryAdd(columna, rol);
+        }
 
-        _mapeoConfirmadoPorUsuario = true; // ← bloquear auto-reset en LeerDatos
+        Asignar(colCategoria, "categoria");
+        Asignar(colValor, "valor");
+        Asignar(colNombre, "nombre");
+        Asignar(colFecha, "fecha");
+
+        _mapeoConfirmadoPorUsuario = true;
     }
 
-    // ── Paso 3: leer datos usando el mapeo vigente ───────────────
     public List<DataItem> LeerDatos()
     {
         var lista = new List<DataItem>();
@@ -83,11 +84,9 @@ public class MariaDbConnector
             for (int i = 0; i < reader.FieldCount; i++) mapa[reader.GetName(i)] = i;
             UltimasColumnas = mapa.Keys.ToList();
 
-            // SOLO aplicar auto-mapeo si el usuario NO confirmó manualmente
             if (!_mapeoConfirmadoPorUsuario)
                 ActualizarMapeoAutomatico(mapa.Keys);
 
-            // Leer columna destino para cada rol desde el mapeo vigente
             string? colId = MapeoColumnas.FirstOrDefault(kv => kv.Value == "id").Key;
             string? colNom = MapeoColumnas.FirstOrDefault(kv => kv.Value == "nombre").Key;
             string? colCat = MapeoColumnas.FirstOrDefault(kv => kv.Value == "categoria").Key;
@@ -111,7 +110,6 @@ public class MariaDbConnector
                 item.Valor = LeerDbl(reader, mapa, colVal) ?? 0;
                 item.Fecha = LeerDate(reader, mapa, colFec) ?? DateTime.Now;
 
-                // Columnas restantes → CamposExtra
                 foreach (var kv in mapa)
                 {
                     if (mapeadasSet.Contains(kv.Key)) continue;
@@ -193,12 +191,9 @@ public class MariaDbConnector
     {
         if (items.Count == 0) return;
 
-        bool faltaCategoria = string.IsNullOrWhiteSpace(colCategoria) ||
-            items.Count(i => string.IsNullOrWhiteSpace(i.Categoria) || i.Categoria == "Sin categoría") >= items.Count * 0.8;
-        bool faltaValor = string.IsNullOrWhiteSpace(colValor) ||
-            items.Count(i => Math.Abs(i.Valor) < 0.0000001) == items.Count;
-        bool faltaNombre = string.IsNullOrWhiteSpace(colNombre) ||
-            items.Count(i => i.Nombre.StartsWith("Registro-", StringComparison.OrdinalIgnoreCase)) >= items.Count * 0.8;
+        bool faltaCategoria = string.IsNullOrWhiteSpace(colCategoria);
+        bool faltaValor = string.IsNullOrWhiteSpace(colValor);
+        bool faltaNombre = string.IsNullOrWhiteSpace(colNombre);
 
         string? kCategoria = faltaCategoria ? BuscarMejorClaveCategoria(items) : null;
         string? kValor = faltaValor ? BuscarMejorClaveNumerica(items) : null;

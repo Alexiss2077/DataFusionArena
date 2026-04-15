@@ -299,6 +299,7 @@ public partial class MainForm : Form
     //  CONEXIÓN BD
     // ══════════════════════════════════════════════════════════════
 
+
     private async void BtnConectarPostgres_Click(object sender, EventArgs e)
     {
         using var dlg = new FormConexionBD("PostgreSQL");
@@ -329,6 +330,8 @@ public partial class MainForm : Form
 
         _lastPgConnector = pg;
         _ultimoTipoCargado = "postgresql";
+        // Reemplazar snapshot anterior de PostgreSQL (evita mezclar cargas con mapeos distintos)
+        _datos.RemoveAll(d => d.Fuente == "postgresql");
         DataProcessor.AgregarDatos(_datos, datos);
         await ActualizarTodoAsync();
         ActualizarEstadoBarra($"✅ PostgreSQL: {datos.Count} registros cargados.");
@@ -363,6 +366,8 @@ public partial class MainForm : Form
 
         _lastMdConnector = md;
         _ultimoTipoCargado = "mariadb";
+        // Reemplazar snapshot anterior de MariaDB (evita mezclar cargas con mapeos distintos)
+        _datos.RemoveAll(d => d.Fuente == "mariadb");
         DataProcessor.AgregarDatos(_datos, datos);
         await ActualizarTodoAsync();
         ActualizarEstadoBarra($"✅ MariaDB: {datos.Count} registros cargados.");
@@ -1038,6 +1043,26 @@ public class FormSeleccionColumnas : Form
             ColValor = cV.Text == "(ninguna)" ? "" : cV.Text;
             ColNombre = cN.Text == "(ninguna)" ? "" : cN.Text;
             ColFecha = cF.Text == "(ninguna)" ? "" : cF.Text;
+
+            // Evitar seleccionar la misma columna para múltiples roles:
+            // el mapeo interno usa una clave por columna y eso produce
+            // ambigüedad/sobrescritura de roles.
+            var usados = new[] { ColCategoria, ColValor, ColNombre, ColFecha }
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+            bool hayDuplicados = usados.Count != usados
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count();
+            if (hayDuplicados)
+            {
+                MessageBox.Show(
+                    "No uses la misma columna para más de un campo.\n" +
+                    "Elige columnas distintas para Categoría, Valor, Nombre y Fecha.",
+                    "Mapeo inválido",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                DialogResult = DialogResult.None; // mantener diálogo abierto
+                return;
+            }
         };
 
         ClientSize = new Size(460, y + 50);

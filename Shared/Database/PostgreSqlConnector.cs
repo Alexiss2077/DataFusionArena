@@ -50,10 +50,19 @@ public class PostgreSqlConnector
             string.Equals(c, "id", StringComparison.OrdinalIgnoreCase));
         if (colId != null) MapeoColumnas[colId] = "id";
 
-        if (!string.IsNullOrEmpty(colCategoria)) MapeoColumnas[colCategoria] = "categoria";
-        if (!string.IsNullOrEmpty(colValor)) MapeoColumnas[colValor] = "valor";
-        if (!string.IsNullOrEmpty(colNombre)) MapeoColumnas[colNombre] = "nombre";
-        if (!string.IsNullOrEmpty(colFecha)) MapeoColumnas[colFecha] = "fecha";
+        // Evitar sobrescritura accidental cuando el usuario selecciona
+        // la misma columna para más de un rol (ej. categoría y nombre).
+        // El primer rol que llegue conserva prioridad.
+        void Asignar(string? columna, string rol)
+        {
+            if (string.IsNullOrWhiteSpace(columna)) return;
+            MapeoColumnas.TryAdd(columna, rol);
+        }
+
+        Asignar(colCategoria, "categoria");
+        Asignar(colValor, "valor");
+        Asignar(colNombre, "nombre");
+        Asignar(colFecha, "fecha");
 
         _mapeoConfirmadoPorUsuario = true;
     }
@@ -211,12 +220,13 @@ public class PostgreSqlConnector
     {
         if (items.Count == 0) return;
 
-        bool faltaCategoria = string.IsNullOrWhiteSpace(colCategoria) ||
-            items.Count(i => string.IsNullOrWhiteSpace(i.Categoria) || i.Categoria == "Sin categoría") >= items.Count * 0.8;
-        bool faltaValor = string.IsNullOrWhiteSpace(colValor) ||
-            items.Count(i => Math.Abs(i.Valor) < 0.0000001) == items.Count;
-        bool faltaNombre = string.IsNullOrWhiteSpace(colNombre) ||
-            items.Count(i => i.Nombre.StartsWith("Registro-", StringComparison.OrdinalIgnoreCase)) >= items.Count * 0.8;
+        // IMPORTANTE:
+        // Si el usuario seleccionó una columna manualmente en el diálogo,
+        // respetamos esa decisión y NO sobreescribimos con heurísticas.
+        // Solo inferimos cuando el mapeo quedó en "(ninguna)".
+        bool faltaCategoria = string.IsNullOrWhiteSpace(colCategoria);
+        bool faltaValor = string.IsNullOrWhiteSpace(colValor);
+        bool faltaNombre = string.IsNullOrWhiteSpace(colNombre);
 
         string? kCategoria = faltaCategoria ? BuscarMejorClaveCategoria(items) : null;
         string? kValor = faltaValor ? BuscarMejorClaveNumerica(items) : null;
