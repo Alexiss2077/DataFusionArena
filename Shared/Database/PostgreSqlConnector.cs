@@ -129,6 +129,7 @@ public class PostgreSqlConnector
             }
             Console.WriteLine($"[PostgreSQL] ✓  {lista.Count} registros leídos. " +
                 $"Cat={colCat ?? "—"} Val={colVal ?? "—"} Nom={colNom ?? "—"}");
+            EnriquecerCamposFaltantes(lista, colCat, colVal, colNom);
         }
         catch (Exception ex) { Console.WriteLine($"[PostgreSQL] ✗  Error: {ex.Message}"); }
         return lista;
@@ -178,10 +179,10 @@ public class PostgreSqlConnector
 
         string? c;
         c = Find("id"); if (c != null) MapeoColumnas[c] = "id";
-        c = Find("nombre", "name", "titulo", "title", "pais", "country", "jugador", "player", "empleado", "employee"); if (c != null) MapeoColumnas[c] = "nombre";
-        c = Find("categoria", "category", "genero", "genre", "region", "tipo", "type", "departamento", "department", "level"); if (c != null) MapeoColumnas[c] = "categoria";
-        c = Find("valor", "value", "precio", "price", "ventas_global", "ventas", "sales", "score", "puntos", "salario", "puntaje", "total"); if (c != null) MapeoColumnas[c] = "valor";
-        c = Find("fecha", "date", "fecha_lanzamiento", "anio", "year", "created_at", "updated_at", "timestamp"); if (c != null) MapeoColumnas[c] = "fecha";
+        c = Find("nombre", "name", "titulo", "title", "pais", "country", "jugador", "player", "empleado", "employee", "producto", "item"); if (c != null) MapeoColumnas[c] = "nombre";
+        c = Find("categoria", "category", "genero", "genre", "region", "tipo", "type", "departamento", "department", "level", "segmento", "segment", "grupo", "group_name", "clasificacion"); if (c != null) MapeoColumnas[c] = "categoria";
+        c = Find("valor", "value", "precio", "price", "ventas_global", "ventas", "sales", "score", "puntos", "salario", "puntaje", "total", "monto", "amount", "importe", "cost", "costo", "revenue", "ingreso", "metrica"); if (c != null) MapeoColumnas[c] = "valor";
+        c = Find("fecha", "date", "fecha_lanzamiento", "anio", "year", "created_at", "updated_at", "timestamp", "fecha_registro", "fecha_reporte", "periodo"); if (c != null) MapeoColumnas[c] = "fecha";
     }
 
     private static string? LeerStr(NpgsqlDataReader r, Dictionary<string, int> m, string? col)
@@ -203,5 +204,124 @@ public class PostgreSqlConnector
     {
         if (col == null || !m.TryGetValue(col, out int i) || r.IsDBNull(i)) return null;
         return DateTime.TryParse(r[i].ToString(), out DateTime d) ? d : null;
+    }
+
+    private static void EnriquecerCamposFaltantes(
+        List<DataItem> items, string? colCategoria, string? colValor, string? colNombre)
+    {
+        if (items.Count == 0) return;
+
+        bool faltaCategoria = string.IsNullOrWhiteSpace(colCategoria) ||
+            items.Count(i => string.IsNullOrWhiteSpace(i.Categoria) || i.Categoria == "Sin categoría") >= items.Count * 0.8;
+        bool faltaValor = string.IsNullOrWhiteSpace(colValor) ||
+            items.Count(i => Math.Abs(i.Valor) < 0.0000001) == items.Count;
+        bool faltaNombre = string.IsNullOrWhiteSpace(colNombre) ||
+            items.Count(i => i.Nombre.StartsWith("Registro-", StringComparison.OrdinalIgnoreCase)) >= items.Count * 0.8;
+
+        string? kCategoria = faltaCategoria ? BuscarMejorClaveCategoria(items) : null;
+        string? kValor = faltaValor ? BuscarMejorClaveNumerica(items) : null;
+        string? kNombre = faltaNombre ? BuscarMejorClaveTexto(items, kCategoria) : null;
+
+        foreach (var item in items)
+        {
+            if (kCategoria != null &&
+                (string.IsNullOrWhiteSpace(item.Categoria) || item.Categoria == "Sin categoría") &&
+                item.CamposExtra.TryGetValue(kCategoria, out var cat) &&
+                !string.IsNullOrWhiteSpace(cat))
+                item.Categoria = cat.Trim();
+
+            if (kValor != null && Math.Abs(item.Valor) < 0.0000001 &&
+                item.CamposExtra.TryGetValue(kValor, out var raw) &&
+                double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out double v))
+                item.Valor = v;
+
+            if (kNombre != null &&
+                item.Nombre.StartsWith("Registro-", StringComparison.OrdinalIgnoreCase) &&
+                item.CamposExtra.TryGetValue(kNombre, out var nombre) &&
+                !string.IsNullOrWhiteSpace(nombre))
+                item.Nombre = nombre.Trim();
+        }
+    }
+
+    private static string? BuscarMejorClaveCategoria(List<DataItem> items)
+    {
+        var candidatos = items.SelectMany(i => i.CamposExtra.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        string? mejor = null;
+        int mejorPuntaje = 0;
+
+        foreach (var key in candidatos)
+        {
+            int noVacios = 0, noNumericos = 0;
+            var unicos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items)
+            {
+                if (!item.CamposExtra.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                noVacios++;
+                var v = raw.Trim();
+                unicos.Add(v);
+                bool esNumero = double.TryParse(v, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out _);
+                if (!esNumero) noNumericos++;
+            }
+
+            if (noVacios == 0 || noNumericos < Math.Max(2, noVacios / 2)) continue;
+            if (unicos.Count <= 1 || unicos.Count > Math.Max(2, items.Count - 1)) continue;
+
+            int puntaje = noVacios + Math.Min(unicos.Count * 2, 30);
+            if (puntaje > mejorPuntaje) { mejorPuntaje = puntaje; mejor = key; }
+        }
+        return mejor;
+    }
+
+    private static string? BuscarMejorClaveNumerica(List<DataItem> items)
+    {
+        var candidatos = items.SelectMany(i => i.CamposExtra.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        string? mejor = null;
+        int mejorPuntaje = 0;
+
+        foreach (var key in candidatos)
+        {
+            int numericos = 0;
+            foreach (var item in items)
+                if (item.CamposExtra.TryGetValue(key, out var raw) &&
+                    double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out _))
+                    numericos++;
+
+            if (numericos < Math.Max(2, items.Count / 3)) continue;
+            if (numericos > mejorPuntaje) { mejorPuntaje = numericos; mejor = key; }
+        }
+        return mejor;
+    }
+
+    private static string? BuscarMejorClaveTexto(List<DataItem> items, string? evitar)
+    {
+        var candidatos = items.SelectMany(i => i.CamposExtra.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(k => !string.Equals(k, evitar, StringComparison.OrdinalIgnoreCase));
+
+        string? mejor = null;
+        int mejorPuntaje = 0;
+
+        foreach (var key in candidatos)
+        {
+            int noVacios = 0, noNumericos = 0;
+            foreach (var item in items)
+            {
+                if (!item.CamposExtra.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                noVacios++;
+                bool esNumero = double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out _);
+                if (!esNumero) noNumericos++;
+            }
+            if (noVacios == 0 || noNumericos < Math.Max(2, noVacios / 2)) continue;
+            if (noVacios > mejorPuntaje) { mejorPuntaje = noVacios; mejor = key; }
+        }
+        return mejor;
     }
 }

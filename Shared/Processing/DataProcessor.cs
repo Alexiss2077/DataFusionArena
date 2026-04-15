@@ -31,9 +31,10 @@ public static class DataProcessor
         var dict = new Dictionary<string, List<DataItem>>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in datos)
         {
-            if (!dict.ContainsKey(item.Categoria))
-                dict[item.Categoria] = new List<DataItem>();
-            dict[item.Categoria].Add(item);
+            string categoria = NormalizarCategoria(item.Categoria);
+            if (!dict.ContainsKey(categoria))
+                dict[categoria] = new List<DataItem>();
+            dict[categoria].Add(item);
         }
         return dict;
     }
@@ -163,10 +164,11 @@ public static class DataProcessor
         for (int i = 0; i < datos.Count; i++)
         {
             var item = datos[i];
-            if (!stats.ContainsKey(item.Categoria))
-                stats[item.Categoria] = new EstadisticasCategoria { Categoria = item.Categoria };
+            string categoria = NormalizarCategoria(item.Categoria);
+            if (!stats.ContainsKey(categoria))
+                stats[categoria] = new EstadisticasCategoria { Categoria = categoria };
 
-            var s = stats[item.Categoria];
+            var s = stats[categoria];
             s.Cantidad++;
             s.SumaValores += item.Valor;
             if (item.Valor > s.ValorMaximo) s.ValorMaximo = item.Valor;
@@ -273,6 +275,9 @@ public static class DataProcessor
 
         return string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string NormalizarCategoria(string? categoria)
+        => string.IsNullOrWhiteSpace(categoria) ? "Sin categoría" : categoria.Trim();
 }
 
 // ──────────────────────────────────────────────────────────────
