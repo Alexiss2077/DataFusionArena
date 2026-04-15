@@ -65,18 +65,21 @@ public static class CsvDataReader
                                        .ToList();
 
             // Aliases conocidos
-            int idxId = BuscarColumna(mapa, "id", "codigo", "code", "sku", "#");
+            int idxId = BuscarColumna(mapa, "id", "car_id", "codigo", "code", "sku", "#");
             int idxNombre = BuscarColumna(mapa, "nombre", "name", "titulo", "title", "producto",
                                           "juego", "descripcion", "description", "player", "jugador",
-                                          "employee", "empleado");
+                                          "employee", "empleado", "brand", "marca");
             int idxCat = BuscarColumna(mapa, "categoria", "category", "genero", "genre", "tipo",
                                           "type", "grupo", "group", "departamento", "department",
-                                          "nivel", "level");
+                                          "nivel", "level", "fuel_type", "transmission");
             int idxValor = BuscarColumna(mapa, "valor", "value", "precio", "price", "monto",
                                           "amount", "ventas", "score", "puntos", "points",
-                                          "salario", "salary", "total");
-            int idxFecha = BuscarColumna(mapa, "fecha", "date", "fecha_lanzamiento", "releasedate",
-                                          "fecha_registro", "created_at", "timestamp");
+                                          "salario", "salary", "total", "price");
+            
+            int idxFecha = BuscarColumnaEstricta(mapa,
+                "fecha", "date", "fecha_lanzamiento", "releasedate",
+                "fecha_registro", "created_at", "updated_at", "timestamp",
+                "model_year", "año", "anio", "year");
 
             // ── Fallback posicional si no se encontraron columnas ────────
             var mapeadas = new HashSet<int>(
@@ -183,4 +186,16 @@ public static class CsvDataReader
 
     private static DateTime ParseFecha(string[] cols, int idx)
         => idx >= 0 && idx < cols.Length && DateTime.TryParse(cols[idx].Trim(), out DateTime d) ? d : DateTime.Now;
+
+    /// <summary>
+    /// Igual que BuscarColumna pero NO hace fallback posicional.
+    /// Solo devuelve un índice si el nombre de columna coincide exactamente
+    /// con uno de los alias. Esto evita que columnas numéricas con valores
+    /// </summary>
+    private static int BuscarColumnaEstricta(Dictionary<string, int> mapa, params string[] alias)
+    {
+        foreach (var a in alias)
+            if (mapa.TryGetValue(a, out int idx)) return idx;
+        return -1;  // -1 = no encontrado, NO hacer fallback
+    }
 }
