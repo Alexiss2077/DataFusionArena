@@ -3,27 +3,14 @@ using DataFusionArena.Shared.Models;
 
 namespace DataFusionArena.Shared.Database;
 
-/// <summary>
-/// Conecta a MariaDB (o MySQL) y lee datos desde cualquier tabla, mapeándolos a List&lt;DataItem&gt;.
-/// Compatible con HeidiSQL: Host=localhost, Port=3306.
-/// </summary>
 public class MariaDbConnector
 {
     public string CadenaConexion { get; set; } =
         "Server=localhost;Port=3306;Database=datafusion;User=root;Password=tu_password;";
 
     public string Tabla { get; set; } = "puntuaciones";
-
-    /// <summary>Límite de filas. 0 = sin límite.</summary>
     public int LimiteFilas { get; set; } = 0;
-
-    /// <summary>Nombres de columna en el orden original de la tabla (se puebla tras LeerDatos).</summary>
     public List<string> UltimasColumnas { get; private set; } = new();
-
-    /// <summary>
-    /// Mapeo columna-BD → propiedad-DataItem ("id","nombre","categoria","valor","fecha").
-    /// Las columnas que no aparecen aquí van a CamposExtra.
-    /// </summary>
     public Dictionary<string, string> MapeoColumnas { get; private set; } =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -35,7 +22,6 @@ public class MariaDbConnector
         Tabla = tabla;
     }
 
-    /// <summary>Lee todos los registros de la tabla configurada (sin límite por defecto).</summary>
     public List<DataItem> LeerDatos()
     {
         var lista = new List<DataItem>();
@@ -46,7 +32,6 @@ public class MariaDbConnector
             conn.Open();
             Console.WriteLine($"[MariaDB] ✓  Conectado a {conn.Database}");
 
-            // Sin LIMIT a menos que LimiteFilas > 0
             string sql = LimiteFilas > 0
                 ? $"SELECT * FROM `{Tabla}` LIMIT {LimiteFilas}"
                 : $"SELECT * FROM `{Tabla}`";
@@ -59,17 +44,30 @@ public class MariaDbConnector
             for (int i = 0; i < reader.FieldCount; i++)
                 mapa[reader.GetName(i)] = i;
 
-            // ── Exponer metadatos de columnas para la UI ──────────────────
             UltimasColumnas = Enumerable.Range(0, reader.FieldCount)
                 .Select(i => reader.GetName(i)).ToList();
             MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             {
                 string? _c;
-                _c = PrimeraColumna(mapa, "id"); if (_c != null) MapeoColumnas[_c] = "id";
-                _c = PrimeraColumna(mapa, "nombre", "name", "jugador"); if (_c != null) MapeoColumnas[_c] = "nombre";
-                _c = PrimeraColumna(mapa, "categoria", "category", "nivel"); if (_c != null) MapeoColumnas[_c] = "categoria";
-                _c = PrimeraColumna(mapa, "valor", "value", "puntos", "score"); if (_c != null) MapeoColumnas[_c] = "valor";
-                _c = PrimeraColumna(mapa, "fecha", "date", "fecha_registro"); if (_c != null) MapeoColumnas[_c] = "fecha";
+                _c = PrimeraColumna(mapa, "id");
+                if (_c != null) MapeoColumnas[_c] = "id";
+
+                _c = PrimeraColumna(mapa, "nombre", "name", "jugador", "pais", "country",
+                    "titulo", "title", "producto", "descripcion", "description", "player", "empleado", "employee");
+                if (_c != null) MapeoColumnas[_c] = "nombre";
+
+                _c = PrimeraColumna(mapa, "categoria", "category", "nivel", "genero", "genre",
+                    "region", "tipo", "type", "grupo", "group", "departamento", "department", "clase", "class");
+                if (_c != null) MapeoColumnas[_c] = "categoria";
+
+                _c = PrimeraColumna(mapa, "valor", "value", "puntos", "score", "puntaje",
+                    "precio", "price", "monto", "amount", "ventas", "sales", "total", "suma",
+                    "salario", "salary", "ventas_global", "rating", "calificacion");
+                if (_c != null) MapeoColumnas[_c] = "valor";
+
+                _c = PrimeraColumna(mapa, "fecha", "date", "fecha_registro", "fecha_reporte",
+                    "fecha_lanzamiento", "created_at", "updated_at", "timestamp", "anio", "year");
+                if (_c != null) MapeoColumnas[_c] = "fecha";
             }
 
             int contador = 1;
@@ -78,18 +76,27 @@ public class MariaDbConnector
                 var item = new DataItem { Fuente = "mariadb" };
 
                 item.Id = LeerInt(reader, mapa, "id") ?? contador;
-                item.Nombre = LeerStr(reader, mapa, "nombre", "name", "jugador") ?? FallbackStr(reader, mapa, "id") ?? $"Registro-{contador}";
-                item.Categoria = LeerStr(reader, mapa, "categoria", "category", "nivel") ?? FallbackStr(reader, mapa, "id", "nombre", "name", "jugador", "valor", "value", "puntos", "score", "fecha", "date", "fecha_registro") ?? "Sin categoría";
-                item.Valor = LeerDbl(reader, mapa, "valor", "value", "puntos", "score") ?? 0;
-                item.Fecha = LeerDate(reader, mapa, "fecha", "date", "fecha_registro") ?? DateTime.Now;
+                item.Nombre = LeerStr(reader, mapa, "nombre", "name", "jugador", "pais", "country",
+                    "titulo", "title", "producto", "player", "empleado", "employee") ??
+                    FallbackStr(reader, mapa, "id") ?? $"Registro-{contador}";
+                item.Categoria = LeerStr(reader, mapa, "categoria", "category", "nivel", "genero", "genre",
+                    "region", "tipo", "type", "grupo", "group", "departamento", "department") ??
+                    FallbackStr(reader, mapa, "id", "nombre", "name", "jugador", "pais", "country",
+                        "titulo", "title", "producto", "player", "empleado", "employee",
+                        "valor", "value", "puntos", "score", "puntaje", "precio", "price",
+                        "monto", "amount", "ventas", "sales", "total", "suma", "salario", "salary",
+                        "ventas_global", "fecha", "date", "fecha_registro", "fecha_reporte") ?? "Sin categoría";
+                item.Valor = LeerDbl(reader, mapa, "valor", "value", "puntos", "score", "puntaje",
+                    "precio", "price", "monto", "amount", "ventas", "sales", "total", "suma",
+                    "salario", "salary", "ventas_global", "rating", "calificacion") ?? 0;
+                item.Fecha = LeerDate(reader, mapa, "fecha", "date", "fecha_registro", "fecha_reporte",
+                    "fecha_lanzamiento", "created_at", "updated_at", "timestamp") ?? DateTime.Now;
 
+                var mapeadasSet = new HashSet<string>(MapeoColumnas.Keys, StringComparer.OrdinalIgnoreCase);
                 foreach (var kv in mapa)
                 {
-                    string c = kv.Key.ToLower();
-                    if (c is "id" or "nombre" or "name" or "jugador"
-                          or "categoria" or "category" or "nivel"
-                          or "valor" or "value" or "puntos" or "score"
-                          or "fecha" or "date" or "fecha_registro") continue;
+                    if (mapeadasSet.Contains(kv.Key)) continue;
+                    if (string.Equals(kv.Key, "id", StringComparison.OrdinalIgnoreCase)) continue;
                     if (!reader.IsDBNull(kv.Value))
                         item.CamposExtra[kv.Key] = reader[kv.Value]?.ToString() ?? "";
                 }
@@ -129,7 +136,6 @@ public class MariaDbConnector
         }
     }
 
-    // ──────────────────────────────────────────────────────────────
     private static string? LeerStr(MySqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
@@ -172,7 +178,6 @@ public class MariaDbConnector
         return null;
     }
 
-    /// <summary>Devuelve el primer alias que exista en el mapa de columnas, o null si ninguno.</summary>
     private static string? PrimeraColumna(Dictionary<string, int> mapa, params string[] alias)
     {
         foreach (var a in alias)
