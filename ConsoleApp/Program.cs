@@ -312,12 +312,27 @@ class Program
 
         if (op == "1")
         {
-            Console.Write("\n  Cadena de conexión PostgreSQL:\n  > ");
-            string? cadena = Console.ReadLine()?.Trim();
-            if (string.IsNullOrEmpty(cadena)) { Color(ConsoleColor.Yellow, "  Cadena vacía, cancelado."); return; }
-            Console.Write("  Nombre de tabla: ");
+            Console.Write("\n  Host   (default: localhost): ");
+            string host = Console.ReadLine()?.Trim() is { Length: > 0 } h ? h : "localhost";
+
+            Console.Write("  Puerto (default: 5432):      ");
+            string port = Console.ReadLine()?.Trim() is { Length: > 0 } p ? p : "5432";
+
+            Console.Write("  Base de datos:               ");
+            string db = Console.ReadLine()?.Trim() ?? "";
+            if (string.IsNullOrEmpty(db)) { Color(ConsoleColor.Yellow, "  Base de datos vacía, cancelado."); return; }
+
+            Console.Write("  Usuario (default: postgres):  ");
+            string user = Console.ReadLine()?.Trim() is { Length: > 0 } u ? u : "postgres";
+
+            Console.Write("  Contraseña:                  ");
+            string pass = LeerContraseña();
+
+            Console.Write("  Nombre de tabla:             ");
             string tabla = Console.ReadLine()?.Trim() ?? "";
             if (string.IsNullOrEmpty(tabla)) { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
+
+            string cadena = $"Host={host};Port={port};Database={db};Username={user};Password={pass};";
 
             var pg = new PostgreSqlConnector(cadena, tabla);
             Console.WriteLine("\n  Probando conexión...");
@@ -328,18 +343,33 @@ class Program
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
                 ReconstruirColumnas();
-                Color(ConsoleColor.Green, $"   {datos.Count} registros cargados desde PostgreSQL.");
+                Color(ConsoleColor.Green, $"  ✅ {datos.Count} registros cargados desde PostgreSQL.");
             }
             else Color(ConsoleColor.Red, $"  ❌ {msg}");
         }
         else if (op == "2")
         {
-            Console.Write("\n  Cadena de conexión MariaDB:\n  > ");
-            string? cadena = Console.ReadLine()?.Trim();
-            if (string.IsNullOrEmpty(cadena)) { Color(ConsoleColor.Yellow, "  Cadena vacía, cancelado."); return; }
-            Console.Write("  Nombre de tabla: ");
+            Console.Write("\n  Host   (default: localhost): ");
+            string host = Console.ReadLine()?.Trim() is { Length: > 0 } h ? h : "localhost";
+
+            Console.Write("  Puerto (default: 3306):      ");
+            string port = Console.ReadLine()?.Trim() is { Length: > 0 } p ? p : "3306";
+
+            Console.Write("  Base de datos:               ");
+            string db = Console.ReadLine()?.Trim() ?? "";
+            if (string.IsNullOrEmpty(db)) { Color(ConsoleColor.Yellow, "  Base de datos vacía, cancelado."); return; }
+
+            Console.Write("  Usuario (default: root):     ");
+            string user = Console.ReadLine()?.Trim() is { Length: > 0 } u ? u : "root";
+
+            Console.Write("  Contraseña:                  ");
+            string pass = LeerContraseña();
+
+            Console.Write("  Nombre de tabla:             ");
             string tabla = Console.ReadLine()?.Trim() ?? "";
             if (string.IsNullOrEmpty(tabla)) { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
+
+            string cadena = $"Server={host};Port={port};Database={db};User={user};Password={pass};";
 
             var md = new MariaDbConnector(cadena, tabla);
             Console.WriteLine("\n  Probando conexión...");
@@ -350,12 +380,32 @@ class Program
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
                 ReconstruirColumnas();
-                Color(ConsoleColor.Green, $"   {datos.Count} registros cargados desde MariaDB.");
+                Color(ConsoleColor.Green, $"  ✅ {datos.Count} registros cargados desde MariaDB.");
             }
             else Color(ConsoleColor.Red, $"  ❌ {msg}");
         }
     }
 
+    static string LeerContraseña()
+    {
+        var sb = new System.Text.StringBuilder();
+        ConsoleKeyInfo key;
+        while ((key = Console.ReadKey(intercept: true)).Key != ConsoleKey.Enter)
+        {
+            if (key.Key == ConsoleKey.Backspace && sb.Length > 0)
+            {
+                sb.Remove(sb.Length - 1, 1);
+                Console.Write("\b \b");
+            }
+            else if (key.Key != ConsoleKey.Backspace)
+            {
+                sb.Append(key.KeyChar);
+                Console.Write('*');
+            }
+        }
+        Console.WriteLine();
+        return sb.ToString();
+    }
     // ══════════════════════════════════════════════════════════════
     //  NIVEL 6 – Tabla DINÁMICA
     // ══════════════════════════════════════════════════════════════
