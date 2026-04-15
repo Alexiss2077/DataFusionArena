@@ -3,24 +3,22 @@ using DataFusionArena.Shared.Models;
 
 namespace DataFusionArena.Shared.Readers;
 
-/// <summary>
-/// Lee un archivo JSON con un arreglo de objetos y lo convierte a List&lt;DataItem&gt;.
-/// Maneja JSON mal formado (evento sorpresa) con try-catch granular.
-/// Si no encuentra columnas con nombres conocidos, usa fallback inteligente
-/// basado en el tipo de dato de cada propiedad.
-/// </summary>
 public static class JsonDataReader
 {
-    // Nombres conocidos para cada campo (en orden de prioridad)
     private static readonly string[] _nombreKeys = { "nombre", "name", "titulo", "title", "producto", "juego", "descripcion", "description", "player", "jugador" };
     private static readonly string[] _categoriaKeys = { "categoria", "category", "genero", "genre", "tipo", "type", "grupo", "group", "departamento", "department", "nivel", "level" };
     private static readonly string[] _valorKeys = { "valor", "value", "precio", "price", "monto", "amount", "score", "puntos", "points", "salario", "salary", "total", "suma" };
     private static readonly string[] _fechaKeys = { "fecha", "date", "releasedate", "fecha_lanzamiento", "fecha_registro", "created_at", "updated_at", "timestamp" };
     private static readonly string[] _idKeys = { "id", "Id", "ID", "codigo", "code", "sku" };
 
+    public static List<string> UltimasColumnas { get; private set; } = new();
+    public static Dictionary<string, string> MapeoColumnas { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public static List<DataItem> Leer(string rutaArchivo)
     {
         var lista = new List<DataItem>();
+        UltimasColumnas = new List<string>();
+        MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         if (!File.Exists(rutaArchivo))
         {
@@ -39,6 +37,9 @@ public static class JsonDataReader
                 ? raiz.EnumerateArray().ToList()
                 : new List<JsonElement> { raiz };
 
+            if (elementos.Count > 0)
+                DetectarMetadatos(elementos[0]);
+
             int contadorId = 1;
             foreach (var el in elementos)
             {
@@ -52,7 +53,6 @@ public static class JsonDataReader
                     item.Valor = LeerDouble(el, _valorKeys) ?? FallbackPrimerNumero(el, _idKeys) ?? 0.0;
                     item.Fecha = LeerFecha(el, _fechaKeys) ?? DateTime.Now;
 
-                    // Resto de campos → CamposExtra
                     var usadas = new HashSet<string>(_idKeys.Concat(_nombreKeys).Concat(_categoriaKeys)
                                                            .Concat(_valorKeys).Concat(_fechaKeys),
                                                     StringComparer.OrdinalIgnoreCase);
@@ -84,9 +84,39 @@ public static class JsonDataReader
         return lista;
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // Recuperación de emergencia
-    // ──────────────────────────────────────────────────────────────
+    private static void DetectarMetadatos(JsonElement primerElemento)
+    {
+        var todasProps = new List<string>();
+        foreach (var prop in primerElemento.EnumerateObject())
+            todasProps.Add(prop.Name);
+
+        string? idCol = BuscarProp(todasProps, _idKeys);
+        string? nombreCol = BuscarProp(todasProps, _nombreKeys);
+        string? catCol = BuscarProp(todasProps, _categoriaKeys);
+        string? valorCol = BuscarProp(todasProps, _valorKeys);
+        string? fechaCol = BuscarProp(todasProps, _fechaKeys);
+
+        MapeoColumnas.Clear();
+        if (idCol != null) MapeoColumnas[idCol] = "id";
+        if (nombreCol != null) MapeoColumnas[nombreCol] = "nombre";
+        if (catCol != null) MapeoColumnas[catCol] = "categoria";
+        if (valorCol != null) MapeoColumnas[valorCol] = "valor";
+        if (fechaCol != null) MapeoColumnas[fechaCol] = "fecha";
+
+        UltimasColumnas.Clear();
+        foreach (var prop in todasProps)
+            UltimasColumnas.Add(prop);
+    }
+
+    private static string? BuscarProp(List<string> props, string[] aliases)
+    {
+        foreach (var alias in aliases)
+            foreach (var p in props)
+                if (string.Equals(p, alias, StringComparison.OrdinalIgnoreCase))
+                    return p;
+        return null;
+    }
+
     private static List<DataItem> RecuperarJsonParcial(string contenido)
     {
         var lista = new List<DataItem>();
@@ -113,7 +143,7 @@ public static class JsonDataReader
                 });
                 id++;
             }
-            catch { /* ignorar fragmentos inválidos */ }
+            catch { }
 
             inicio = contenido.IndexOf('{', fin + 1);
         }
@@ -136,9 +166,6 @@ public static class JsonDataReader
         return -1;
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // Lectura con múltiples nombres posibles
-    // ──────────────────────────────────────────────────────────────
     private static string? LeerCadena(JsonElement el, string[] claves)
     {
         foreach (var clave in claves)
@@ -174,10 +201,6 @@ public static class JsonDataReader
         return null;
     }
 
-    /// <summary>
-    /// Fallback: devuelve el valor de la primera propiedad string que no esté
-    /// en la lista de nombres ya usados.
-    /// </summary>
     private static string? FallbackPrimeraString(JsonElement el, params string[][] excluidos)
     {
         var exc = new HashSet<string>(excluidos.SelectMany(a => a), StringComparer.OrdinalIgnoreCase);
@@ -193,9 +216,6 @@ public static class JsonDataReader
         return null;
     }
 
-    /// <summary>
-    /// Fallback: devuelve el primer número que no sea el ID.
-    /// </summary>
     private static double? FallbackPrimerNumero(JsonElement el, params string[][] excluidos)
     {
         var exc = new HashSet<string>(excluidos.SelectMany(a => a), StringComparer.OrdinalIgnoreCase);

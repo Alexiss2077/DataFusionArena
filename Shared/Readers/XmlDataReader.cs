@@ -3,15 +3,22 @@ using DataFusionArena.Shared.Models;
 
 namespace DataFusionArena.Shared.Readers;
 
-/// <summary>
-/// Lee un archivo XML y lo convierte a List&lt;DataItem&gt;.
-/// Acepta XML jerárquico o plano; busca el primer nivel de elementos hijo.
-/// </summary>
 public static class XmlDataReader
 {
+    public static List<string> UltimasColumnas { get; private set; } = new();
+    public static Dictionary<string, string> MapeoColumnas { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly string[] _idAliases = { "id", "Id", "ID" };
+    private static readonly string[] _nombreAliases = { "nombre", "name", "titulo", "title" };
+    private static readonly string[] _categoriaAliases = { "categoria", "category", "departamento", "department" };
+    private static readonly string[] _valorAliases = { "valor", "value", "salario", "salary" };
+    private static readonly string[] _fechaAliases = { "fecha", "date", "fechaContratacion", "hireDate" };
+
     public static List<DataItem> Leer(string rutaArchivo)
     {
         var lista = new List<DataItem>();
+        UltimasColumnas = new List<string>();
+        MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         if (!File.Exists(rutaArchivo))
         {
@@ -22,12 +29,13 @@ public static class XmlDataReader
         try
         {
             var doc = XDocument.Load(rutaArchivo);
-            // Toma los hijos directos del elemento raíz
             var elementos = doc.Root?.Elements().ToList() ?? new List<XElement>();
 
-            // Si no hay hijos directos con datos, baja un nivel más
             if (elementos.Count > 0 && !TieneAtributosOTexto(elementos[0]))
                 elementos = elementos.SelectMany(e => e.Elements()).ToList();
+
+            if (elementos.Count > 0)
+                DetectarMetadatos(elementos[0]);
 
             int contador = 1;
             foreach (var el in elementos)
@@ -36,29 +44,25 @@ public static class XmlDataReader
                 {
                     var item = new DataItem { Fuente = "xml" };
 
-                    item.Id       = LeerEntero(el, "id", "Id", "ID") ?? contador;
-                    item.Nombre   = LeerCadena(el, "nombre", "name", "titulo", "title") ?? $"Item-{contador}";
-                    item.Categoria = LeerCadena(el, "categoria", "category", "departamento", "department") ?? "Sin categoría";
-                    item.Valor    = LeerDouble(el, "valor", "value", "salario", "salary") ?? 0;
-                    item.Fecha    = LeerFecha(el, "fecha", "date", "fechaContratacion", "hireDate") ?? DateTime.Now;
+                    item.Id = LeerEntero(el, _idAliases) ?? contador;
+                    item.Nombre = LeerCadena(el, _nombreAliases) ?? $"Item-{contador}";
+                    item.Categoria = LeerCadena(el, _categoriaAliases) ?? "Sin categoría";
+                    item.Valor = LeerDouble(el, _valorAliases) ?? 0;
+                    item.Fecha = LeerFecha(el, _fechaAliases) ?? DateTime.Now;
 
-                    // Atributos y elementos extra → CamposExtra
+                    var mapeadas = new HashSet<string>(
+                        _idAliases.Concat(_nombreAliases).Concat(_categoriaAliases)
+                                  .Concat(_valorAliases).Concat(_fechaAliases),
+                        StringComparer.OrdinalIgnoreCase);
+
                     foreach (var attr in el.Attributes())
                     {
-                        string clave = attr.Name.LocalName.ToLower();
-                        if (clave is "id" or "nombre" or "name" or "titulo" or "title"
-                                  or "categoria" or "category" or "departamento" or "department"
-                                  or "valor" or "value" or "salario" or "salary"
-                                  or "fecha" or "date") continue;
+                        if (mapeadas.Contains(attr.Name.LocalName)) continue;
                         item.CamposExtra[attr.Name.LocalName] = attr.Value;
                     }
                     foreach (var hijo in el.Elements())
                     {
-                        string clave = hijo.Name.LocalName.ToLower();
-                        if (clave is "id" or "nombre" or "name" or "titulo" or "title"
-                                  or "categoria" or "category" or "departamento" or "department"
-                                  or "valor" or "value" or "salario" or "salary"
-                                  or "fecha" or "date") continue;
+                        if (mapeadas.Contains(hijo.Name.LocalName)) continue;
                         item.CamposExtra[hijo.Name.LocalName] = hijo.Value.Trim();
                     }
 
@@ -82,7 +86,35 @@ public static class XmlDataReader
         return lista;
     }
 
-    // ──────────────────────────────────────────────────────────────
+    private static void DetectarMetadatos(XElement primerElemento)
+    {
+        var nombresHijos = new List<string>();
+        foreach (var hijo in primerElemento.Elements())
+            nombresHijos.Add(hijo.Name.LocalName);
+        foreach (var attr in primerElemento.Attributes())
+            if (!nombresHijos.Contains(attr.Name.LocalName))
+                nombresHijos.Add(attr.Name.LocalName);
+
+        MapeoColumnas.Clear();
+        string? c;
+        c = BuscarEnLista(nombresHijos, _idAliases); if (c != null) MapeoColumnas[c] = "id";
+        c = BuscarEnLista(nombresHijos, _nombreAliases); if (c != null) MapeoColumnas[c] = "nombre";
+        c = BuscarEnLista(nombresHijos, _categoriaAliases); if (c != null) MapeoColumnas[c] = "categoria";
+        c = BuscarEnLista(nombresHijos, _valorAliases); if (c != null) MapeoColumnas[c] = "valor";
+        c = BuscarEnLista(nombresHijos, _fechaAliases); if (c != null) MapeoColumnas[c] = "fecha";
+
+        UltimasColumnas = new List<string>(nombresHijos);
+    }
+
+    private static string? BuscarEnLista(List<string> lista, string[] aliases)
+    {
+        foreach (var alias in aliases)
+            foreach (var item in lista)
+                if (string.Equals(item, alias, StringComparison.OrdinalIgnoreCase))
+                    return item;
+        return null;
+    }
+
     private static bool TieneAtributosOTexto(XElement el)
         => el.Attributes().Any() || el.Elements().Any() || !string.IsNullOrWhiteSpace(el.Value);
 
