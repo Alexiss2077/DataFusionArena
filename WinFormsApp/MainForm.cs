@@ -56,12 +56,17 @@ public partial class MainForm : Form
             splitCategoria.SplitterDistance = 220;
         };
 
+        // Cuando el usuario cambia al tab de Gráficas, regenerar siempre
         tabControl1.SelectedIndexChanged += (s, e) =>
         {
             if (tabControl1.SelectedTab == tabGraficas)
                 ActualizarChart();
         };
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  HELPERS DE COLUMNAS / COMBOBOXES
+    // ══════════════════════════════════════════════════════════════
 
     private string TraducirClave(string display)
     {
@@ -75,55 +80,25 @@ public partial class MainForm : Form
     {
         _infoColumnas.Clear();
 
-        bool usarCsv = _ultimoTipoCargado == "csv" &&
-                       CsvDataReader.UltimasColumnas.Count > 0;
-        bool usarJson = _ultimoTipoCargado == "json" &&
-                        JsonDataReader.UltimasColumnas.Count > 0;
-        bool usarXml = _ultimoTipoCargado == "xml" &&
-                       XmlDataReader.UltimasColumnas.Count > 0;
-        bool usarTxt = _ultimoTipoCargado == "txt" &&
-                       TxtDataReader.UltimasColumnas.Count > 0;
-        bool usarPg = _ultimoTipoCargado == "postgresql" &&
-                       (_lastPgConnector?.UltimasColumnas.Count ?? 0) > 0;
-        bool usarMd = _ultimoTipoCargado == "mariadb" &&
-                       (_lastMdConnector?.UltimasColumnas.Count ?? 0) > 0;
+        bool usarCsv = _ultimoTipoCargado == "csv" && CsvDataReader.UltimasColumnas.Count > 0;
+        bool usarJson = _ultimoTipoCargado == "json" && JsonDataReader.UltimasColumnas.Count > 0;
+        bool usarXml = _ultimoTipoCargado == "xml" && XmlDataReader.UltimasColumnas.Count > 0;
+        bool usarTxt = _ultimoTipoCargado == "txt" && TxtDataReader.UltimasColumnas.Count > 0;
+        bool usarPg = _ultimoTipoCargado == "postgresql" && (_lastPgConnector?.UltimasColumnas.Count ?? 0) > 0;
+        bool usarMd = _ultimoTipoCargado == "mariadb" && (_lastMdConnector?.UltimasColumnas.Count ?? 0) > 0;
 
         if (usarCsv)
-        {
-            BuildInfoColumnasFromReader(
-                CsvDataReader.UltimasColumnas,
-                CsvDataReader.MapeoColumnas);
-        }
+            BuildInfoColumnasFromReader(CsvDataReader.UltimasColumnas, CsvDataReader.MapeoColumnas);
         else if (usarJson)
-        {
-            BuildInfoColumnasFromReader(
-                JsonDataReader.UltimasColumnas,
-                JsonDataReader.MapeoColumnas);
-        }
+            BuildInfoColumnasFromReader(JsonDataReader.UltimasColumnas, JsonDataReader.MapeoColumnas);
         else if (usarXml)
-        {
-            BuildInfoColumnasFromReader(
-                XmlDataReader.UltimasColumnas,
-                XmlDataReader.MapeoColumnas);
-        }
+            BuildInfoColumnasFromReader(XmlDataReader.UltimasColumnas, XmlDataReader.MapeoColumnas);
         else if (usarTxt)
-        {
-            BuildInfoColumnasFromReader(
-                TxtDataReader.UltimasColumnas,
-                TxtDataReader.MapeoColumnas);
-        }
+            BuildInfoColumnasFromReader(TxtDataReader.UltimasColumnas, TxtDataReader.MapeoColumnas);
         else if (usarPg)
-        {
-            BuildInfoColumnasFromConnector(
-                _lastPgConnector!.UltimasColumnas,
-                _lastPgConnector.MapeoColumnas);
-        }
+            BuildInfoColumnasFromConnector(_lastPgConnector!.UltimasColumnas, _lastPgConnector.MapeoColumnas);
         else if (usarMd)
-        {
-            BuildInfoColumnasFromConnector(
-                _lastMdConnector!.UltimasColumnas,
-                _lastMdConnector.MapeoColumnas);
-        }
+            BuildInfoColumnasFromConnector(_lastMdConnector!.UltimasColumnas, _lastMdConnector.MapeoColumnas);
         else
         {
             foreach (var col in _colsDefault)
@@ -138,8 +113,7 @@ public partial class MainForm : Form
     }
 
     private void BuildInfoColumnasFromReader(
-        List<string> columnas,
-        Dictionary<string, string> mapeo)
+        List<string> columnas, Dictionary<string, string> mapeo)
     {
         var yaAgregadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -148,17 +122,19 @@ public partial class MainForm : Form
             if (mapeo.TryGetValue(col, out var prop))
             {
                 string propLow = prop.ToLower();
-                if (propLow == "id") _infoColumnas.Add((col, "id"));
-                else if (propLow == "nombre") _infoColumnas.Add((col, "nombre"));
-                else if (propLow == "categoria") _infoColumnas.Add((col, "categoria"));
-                else if (propLow == "valor") _infoColumnas.Add((col, "valor"));
-                else if (propLow == "fecha") _infoColumnas.Add((col, "fecha"));
-                else _infoColumnas.Add((col, col.ToLowerInvariant()));
+                _infoColumnas.Add(propLow switch
+                {
+                    "id" => (col, "id"),
+                    "nombre" => (col, "nombre"),
+                    "categoria" => (col, "categoria"),
+                    "valor" => (col, "valor"),
+                    "fecha" => (col, "fecha"),
+                    _ => (col, col.ToLowerInvariant())
+                });
             }
             else
-            {
                 _infoColumnas.Add((col, col.ToLowerInvariant()));
-            }
+
             yaAgregadas.Add(col.ToLowerInvariant());
         }
 
@@ -177,8 +153,7 @@ public partial class MainForm : Form
     }
 
     private void BuildInfoColumnasFromConnector(
-        List<string> columnas,
-        Dictionary<string, string> mapeo)
+        List<string> columnas, Dictionary<string, string> mapeo)
     {
         foreach (var col in columnas)
         {
@@ -233,13 +208,23 @@ public partial class MainForm : Form
         }
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  GRÁFICA  — corregido para que use siempre _datos si
+    //  _datosBase está vacío (p.ej. justo después de cargar BD)
+    // ══════════════════════════════════════════════════════════════
+
     private void ActualizarChart()
     {
         try
         {
-            var fuente = _datosBase.Count > 0 ? _datosBase : _datos;
+            // Usar _datosBase si tiene datos; si no, caer a _datos completo.
+            // Esto cubre el caso en que se acaba de cargar una BD y
+            // _datosBase todavía no se actualizó visualmente.
+            var fuente = (_datosBase.Count > 0) ? _datosBase
+                       : (_datos.Count > 0) ? _datos
+                       : null;
 
-            if (fuente.Count == 0)
+            if (fuente == null || fuente.Count == 0)
             {
                 chartMain.Limpiar();
                 return;
@@ -282,6 +267,10 @@ public partial class MainForm : Form
 
     private void BtnActualizarGrafica_Click(object sender, EventArgs e) => ActualizarChart();
     private void CmbTipoGrafica_SelectedIndexChanged(object sender, EventArgs e) => ActualizarChart();
+
+    // ══════════════════════════════════════════════════════════════
+    //  CARGA DE ARCHIVOS
+    // ══════════════════════════════════════════════════════════════
 
     private async void BtnCargarJson_Click(object? sender, EventArgs e) =>
         await CargarArchivoAsync(Path.Combine(_dirDatos, "products.json"), "json");
@@ -334,13 +323,12 @@ public partial class MainForm : Form
 
         List<DataItem> nuevos = await Task.Run(() =>
         {
-            List<DataItem> items;
             switch (tipo)
             {
-                case "json": items = JsonDataReader.Leer(ruta); break;
-                case "csv": items = CsvDataReader.Leer(ruta); break;
+                case "json": return JsonDataReader.Leer(ruta);
+                case "csv": return CsvDataReader.Leer(ruta);
                 case "xml":
-                    items = XmlDataReader.Leer(ruta);
+                    var items = XmlDataReader.Leer(ruta);
                     foreach (var item in items)
                     {
                         if (item.CamposExtra.TryGetValue("departamento", out var dep))
@@ -352,11 +340,10 @@ public partial class MainForm : Form
                                 out double sv))
                         { item.Valor = sv; item.CamposExtra.Remove("salario"); }
                     }
-                    break;
-                case "txt": items = TxtDataReader.Leer(ruta); break;
+                    return items;
+                case "txt": return TxtDataReader.Leer(ruta);
                 default: return new List<DataItem>();
             }
-            return items;
         });
 
         DataProcessor.AgregarDatos(_datos, nuevos);
@@ -367,6 +354,11 @@ public partial class MainForm : Form
             ActualizarEstadoBarra(
                 $"✅ {nuevos.Count} registros cargados desde {Path.GetFileName(ruta)}. Total: {_datos.Count}");
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  CONEXIÓN A BASES DE DATOS
+    //  — pide campos individuales en lugar de cadena completa
+    // ══════════════════════════════════════════════════════════════
 
     private async void BtnConectarPostgres_Click(object sender, EventArgs e)
     {
@@ -380,7 +372,8 @@ public partial class MainForm : Form
         if (!ok)
         {
             pg.ProbarConexion(out string msgErr);
-            MessageBox.Show($"Error:\n{msgErr}", "PostgreSQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Error:\n{msgErr}", "PostgreSQL",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
             ActualizarEstadoBarra("❌ Error de conexión PostgreSQL.");
             return;
         }
@@ -392,6 +385,8 @@ public partial class MainForm : Form
         _lastPgConnector = pg;
         _ultimoTipoCargado = "postgresql";
         DataProcessor.AgregarDatos(_datos, datos);
+
+        // Actualizar todo ANTES de tocar la gráfica
         await ActualizarTodoAsync();
         ActualizarEstadoBarra($"✅ PostgreSQL: {datos.Count} registros. {msg}");
     }
@@ -408,7 +403,8 @@ public partial class MainForm : Form
         if (!ok)
         {
             md.ProbarConexion(out string msgErr);
-            MessageBox.Show($"Error:\n{msgErr}", "MariaDB", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Error:\n{msgErr}", "MariaDB",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
             ActualizarEstadoBarra("❌ Error de conexión MariaDB.");
             return;
         }
@@ -420,6 +416,8 @@ public partial class MainForm : Form
         _lastMdConnector = md;
         _ultimoTipoCargado = "mariadb";
         DataProcessor.AgregarDatos(_datos, datos);
+
+        // Actualizar todo ANTES de tocar la gráfica
         await ActualizarTodoAsync();
         ActualizarEstadoBarra($"✅ MariaDB: {datos.Count} registros. {msg}");
     }
@@ -457,6 +455,10 @@ public partial class MainForm : Form
         ActualizarEstadoBarra($"✅ Datos actualizados. Total: {_datos.Count} registros.");
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  FILTRAR / ORDENAR
+    // ══════════════════════════════════════════════════════════════
+
     private async void BtnFiltrar_Click(object? sender, EventArgs e)
     {
         string display = cmbCampoBusqueda.Text;
@@ -493,6 +495,10 @@ public partial class MainForm : Form
         ActualizarEstadoBarra($"Ordenado por '{display}' {(asc ? "↑" : "↓")}. {ordenado.Count} registros.");
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  CATEGORÍAS
+    // ══════════════════════════════════════════════════════════════
+
     private async void LstCategorias_SelectedIndexChanged(object sender, EventArgs e)
     {
         if (lstCategorias.SelectedItem is not string cat) return;
@@ -503,6 +509,10 @@ public partial class MainForm : Form
             $"Promedio: {(lista.Count > 0 ? lista.Average(x => x.Valor) : 0):F2}   |   " +
             $"Total: {lista.Sum(x => x.Valor):N2}";
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  ESTADÍSTICAS
+    // ══════════════════════════════════════════════════════════════
 
     private async Task ActualizarTabEstadisticasAsync()
     {
@@ -545,6 +555,10 @@ public partial class MainForm : Form
         lblTotalCategorias.Text = $"Categorías: {stats.Count}";
         lblTotalFuentes.Text = $"Fuentes activas: {fuentes}";
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PROCESAMIENTO / DUPLICADOS / LINQ
+    // ══════════════════════════════════════════════════════════════
 
     private async void BtnDetectarDuplicados_Click(object? sender, EventArgs e)
     {
@@ -607,14 +621,15 @@ public partial class MainForm : Form
             {
                 "nombre" => ContieneNorm(d.Nombre, busqueda),
                 "fuente" => ContieneNorm(d.Fuente, busqueda),
-                "id" => int.TryParse(busqueda, out int idNum) ? d.Id == idNum
-                                : d.Id.ToString().Contains(busqueda),
+                "id" => int.TryParse(busqueda, out int idNum)
+                                   ? d.Id == idNum
+                                   : d.Id.ToString().Contains(busqueda),
                 "categoria" => ContieneNorm(d.Categoria, busqueda),
                 "valor" => d.Valor.ToString("F2").Contains(busqueda),
                 "fecha" => d.Fecha.ToString("yyyy-MM-dd").Contains(busqueda),
                 _ => d.CamposExtra.TryGetValue(clave, out var ev)
-                                ? ContieneNorm(ev, busqueda)
-                                : false
+                                   ? ContieneNorm(ev, busqueda)
+                                   : false
             }).ToList());
 
         await BindGridAsync(dgvProcesamiento, res, null);
@@ -665,24 +680,37 @@ public partial class MainForm : Form
         ActualizarEstadoBarra("Grid de procesamiento limpiado.");
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  ACTUALIZAR TODO  — orden correcto para que la gráfica
+    //  siempre tenga datos cuando se llame a ActualizarChart()
+    // ══════════════════════════════════════════════════════════════
+
     private async Task ActualizarTodoAsync()
     {
         _porCategoria = DataProcessor.AgruparPorCategoria(_datos);
         _porId = DataProcessor.IndexarPorId(_datos);
 
+        // 1. Actualizar lista de fuentes en el CheckedListBox
         ActualizarFuentesCheckedList();
+
+        // 2. Recalcular _datosBase según fuentes activas
+        //    (si no hay ninguna marcada todavía, usar todos los datos)
         _datosBase = GetDatosBase();
         _datosVista = new List<DataItem>(_datosBase);
 
+        // 3. Reconstruir columnas e info para combos
         ReconstruirInfoColumnas();
         RefrescarComboboxes();
         ReconstruirCategorias();
 
+        // 4. Poblar grids y estadísticas
         await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
         await ActualizarTabEstadisticasAsync();
 
+        // 5. Actualizar gráfica — en este punto _datosBase ya tiene datos
         ActualizarChart();
 
+        // 6. Contadores de status
         lblTotalRegistros.Text = $"Total registros: {_datos.Count}";
         lblTotalCategorias.Text = $"Categorías: {_porCategoria.Count}";
         lblTotalFuentes.Text = $"Fuentes: {_datos.Select(d => d.Fuente).Distinct().Count()}";
@@ -696,13 +724,21 @@ public partial class MainForm : Form
             lstCategorias.Items.Add(cat);
     }
 
+    // ── GetDatosBase corregido: si no hay ninguna fuente marcada
+    //    devuelve TODOS los datos para que la gráfica nunca quede vacía.
     private List<DataItem> GetDatosBase()
     {
-        if (clbFuentes.Items.Count == 0) return new List<DataItem>(_datos);
+        if (clbFuentes.Items.Count == 0)
+            return new List<DataItem>(_datos);
+
         var seleccionadas = clbFuentes.CheckedItems
                                       .Cast<string>()
                                       .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (seleccionadas.Count == 0) return new List<DataItem>(_datos);
+
+        // Si nada está marcado aún, mostrar todo
+        if (seleccionadas.Count == 0)
+            return new List<DataItem>(_datos);
+
         return _datos.Where(d => seleccionadas.Contains(d.Fuente)).ToList();
     }
 
@@ -720,6 +756,7 @@ public partial class MainForm : Form
 
         foreach (var f in _datos.Select(d => d.Fuente).Distinct().OrderBy(f => f))
         {
+            // Las fuentes nuevas se marcan automáticamente
             bool esNueva = !prevExistentes.Contains(f);
             bool marcada = esNueva || prevSeleccionadas.Count == 0 || prevSeleccionadas.Contains(f);
             clbFuentes.Items.Add(f, marcada);
@@ -738,7 +775,6 @@ public partial class MainForm : Form
             ReconstruirCategorias();
             await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
             await ActualizarTabEstadisticasAsync();
-
             ActualizarChart();
 
             var nombresActivos = clbFuentes.CheckedItems.Cast<string>().ToList();
@@ -746,6 +782,10 @@ public partial class MainForm : Form
                 $"Mostrando {_datosVista.Count} registros de: {string.Join(", ", nombresActivos)}");
         });
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  BIND GRID
+    // ══════════════════════════════════════════════════════════════
 
     private async Task BindGridAsync(
         DataGridView dgv,
@@ -782,12 +822,14 @@ public partial class MainForm : Form
         dgv.Columns.Clear();
         dgv.AutoGenerateColumns = false;
 
-        var claveMap = colInfos.ToDictionary(c => c.Display, c => c.Clave, StringComparer.OrdinalIgnoreCase);
+        var claveMap = colInfos.ToDictionary(
+            c => c.Display, c => c.Clave, StringComparer.OrdinalIgnoreCase);
         string? nombreDisplay = colInfos.FirstOrDefault(c => c.Clave == "nombre").Display;
 
         foreach (DataColumn col in dt.Columns)
         {
-            string clave = claveMap.TryGetValue(col.ColumnName, out var cv) ? cv : col.ColumnName.ToLower();
+            string clave = claveMap.TryGetValue(col.ColumnName, out var cv)
+                ? cv : col.ColumnName.ToLower();
 
             var dgvCol = new DataGridViewTextBoxColumn
             {
@@ -908,6 +950,10 @@ public partial class MainForm : Form
         return "";
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  CONFIGURACIÓN DE GRIDS
+    // ══════════════════════════════════════════════════════════════
+
     private void ConfigurarDataGridViews()
     {
         foreach (var dgv in new[] { dgvTodos, dgvCategoria, dgvProcesamiento })
@@ -982,6 +1028,10 @@ public partial class MainForm : Form
         Application.DoEvents();
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  MENÚ – LIMPIAR / SALIR / ACERCA DE
+    // ══════════════════════════════════════════════════════════════
+
     private void MenuLimpiarDatos_Click(object sender, EventArgs e)
     {
         if (MessageBox.Show("¿Limpiar todos los datos en memoria?", "Confirmar",
@@ -989,7 +1039,8 @@ public partial class MainForm : Form
 
         _datos.Clear(); _porCategoria.Clear(); _porId.Clear();
         _datosBase.Clear(); _datosVista.Clear();
-        _lastPgConnector = null; _lastMdConnector = null;
+        _lastPgConnector = null;
+        _lastMdConnector = null;
         _ultimoTipoCargado = "";
 
         foreach (var dgv in new[] { dgvTodos, dgvCategoria, dgvProcesamiento })
@@ -1030,38 +1081,110 @@ public partial class MainForm : Form
     private void MenuSalir_Click(object sender, EventArgs e) => Close();
 }
 
+// ══════════════════════════════════════════════════════════════
+//  DIÁLOGO DE CONEXIÓN — pide campos individuales
+// ══════════════════════════════════════════════════════════════
+
 public class FormConexionBD : Form
 {
     public string CadenaConexion { get; private set; } = "";
     public string NombreTabla { get; private set; } = "";
 
-    private readonly TextBox txtCadena, txtTabla;
+    private readonly TextBox txtHost, txtPuerto, txtBD, txtUsuario, txtContrasena, txtTabla;
 
     public FormConexionBD(string motor)
     {
         Text = $"Conexión a {motor}";
-        Size = new Size(520, 260);
+        Size = new Size(460, 340);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         BackColor = Color.FromArgb(30, 30, 45);
         ForeColor = Color.White;
 
-        string cadenaDefault = motor == "PostgreSQL"
-            ? "Host=localhost;Port=5432;Database=;Username=postgres;Password=;"
-            : "Server=localhost;Port=3306;Database=;User=root;Password=;";
-        string tablaDefault = "";
+        bool esPg = motor == "PostgreSQL";
+        string puertoDefault = esPg ? "5432" : "3306";
+        string userDefault = esPg ? "postgres" : "root";
 
-        var lblC = new Label { Text = "Cadena de conexión:", Location = new Point(15, 20), AutoSize = true, ForeColor = Color.Cyan };
-        txtCadena = new TextBox { Location = new Point(15, 42), Width = 475, Text = cadenaDefault, BackColor = Color.FromArgb(45, 45, 65), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
-        var lblT = new Label { Text = "Nombre de tabla:", Location = new Point(15, 85), AutoSize = true, ForeColor = Color.Cyan };
-        txtTabla = new TextBox { Location = new Point(15, 107), Width = 200, Text = tablaDefault, BackColor = Color.FromArgb(45, 45, 65), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
+        // ── Controles ────────────────────────────────────────────
+        int y = 18, lw = 110, tx = 130, tw = 295;
 
-        var btnOk = new Button { Text = "Conectar", Location = new Point(310, 170), Width = 90, DialogResult = DialogResult.OK, BackColor = Color.FromArgb(0, 120, 212), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-        var btnCan = new Button { Text = "Cancelar", Location = new Point(410, 170), Width = 80, DialogResult = DialogResult.Cancel, BackColor = Color.FromArgb(80, 30, 30), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-        btnOk.Click += (_, _) => { CadenaConexion = txtCadena.Text.Trim(); NombreTabla = txtTabla.Text.Trim(); };
+        Label Lbl(string t) => new()
+        { Text = t, AutoSize = true, ForeColor = Color.FromArgb(0, 200, 220) };
+        TextBox Txt(string def, bool pass = false) => new()
+        {
+            Width = tw,
+            Text = def,
+            BackColor = Color.FromArgb(45, 45, 65),
+            ForeColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            UseSystemPasswordChar = pass
+        };
 
-        Controls.AddRange(new Control[] { lblC, txtCadena, lblT, txtTabla, btnOk, btnCan });
+        var lblHost = Lbl("Host:"); lblHost.Location = new Point(15, y + 3);
+        txtHost = Txt("localhost"); txtHost.Location = new Point(tx, y); y += 35;
+
+        var lblPuerto = Lbl("Puerto:"); lblPuerto.Location = new Point(15, y + 3);
+        txtPuerto = Txt(puertoDefault); txtPuerto.Location = new Point(tx, y); y += 35;
+
+        var lblBD = Lbl("Base de datos:"); lblBD.Location = new Point(15, y + 3);
+        txtBD = Txt(""); txtBD.Location = new Point(tx, y); y += 35;
+
+        var lblUsr = Lbl("Usuario:"); lblUsr.Location = new Point(15, y + 3);
+        txtUsuario = Txt(userDefault); txtUsuario.Location = new Point(tx, y); y += 35;
+
+        var lblPass = Lbl("Contraseña:"); lblPass.Location = new Point(15, y + 3);
+        txtContrasena = Txt("", pass: true); txtContrasena.Location = new Point(tx, y); y += 35;
+
+        var lblTabla = Lbl("Tabla:"); lblTabla.Location = new Point(15, y + 3);
+        txtTabla = Txt(""); txtTabla.Location = new Point(tx, y); y += 45;
+
+        var btnOk = new Button
+        {
+            Text = "Conectar",
+            Location = new Point(260, y),
+            Width = 80,
+            DialogResult = DialogResult.OK,
+            BackColor = Color.FromArgb(0, 120, 212),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+        var btnCan = new Button
+        {
+            Text = "Cancelar",
+            Location = new Point(355, y),
+            Width = 80,
+            DialogResult = DialogResult.Cancel,
+            BackColor = Color.FromArgb(80, 30, 30),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+
+        btnOk.Click += (_, _) =>
+        {
+            string h = string.IsNullOrWhiteSpace(txtHost.Text) ? "localhost" : txtHost.Text.Trim();
+            string p = string.IsNullOrWhiteSpace(txtPuerto.Text) ? puertoDefault : txtPuerto.Text.Trim();
+            string db = txtBD.Text.Trim();
+            string user = string.IsNullOrWhiteSpace(txtUsuario.Text) ? userDefault : txtUsuario.Text.Trim();
+            string pass = txtContrasena.Text;
+
+            CadenaConexion = esPg
+                ? $"Host={h};Port={p};Database={db};Username={user};Password={pass};"
+                : $"Server={h};Port={p};Database={db};User={user};Password={pass};";
+            NombreTabla = txtTabla.Text.Trim();
+        };
+
+        Controls.AddRange(new Control[]
+        {
+            lblHost,  txtHost,
+            lblPuerto,txtPuerto,
+            lblBD,    txtBD,
+            lblUsr,   txtUsuario,
+            lblPass,  txtContrasena,
+            lblTabla, txtTabla,
+            btnOk, btnCan
+        });
+
         AcceptButton = btnOk;
         CancelButton = btnCan;
     }
