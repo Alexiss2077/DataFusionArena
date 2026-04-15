@@ -11,6 +11,8 @@ class Program
     static Dictionary<string, List<DataItem>> _porCategoria = new();
     static Dictionary<int, DataItem> _porId = new();
 
+    static List<(string Display, string Clave, int Ancho)> _columnas = ObtenerColumnasDefault();
+
     static readonly string _dirDatos = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SampleData");
 
     static void Main(string[] args)
@@ -22,12 +24,134 @@ class Program
 
         bool continuar = true;
         while (continuar)
-        {
             continuar = MostrarMenu();
-        }
 
         Console.WriteLine("\n¡Hasta luego! 🎮\n");
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  DETECCIÓN DINÁMICA DE COLUMNAS
+    // ══════════════════════════════════════════════════════════════
+
+    static List<(string Display, string Clave, int Ancho)> ObtenerColumnasDefault()
+    {
+        return new()
+        {
+            ("ID", "id", 6), ("Nombre", "nombre", 28), ("Categoría", "categoria", 18),
+            ("Valor", "valor", 10), ("Fecha", "fecha", 12), ("Fuente", "fuente", 12)
+        };
+    }
+
+    static void ReconstruirColumnas()
+    {
+        _columnas = new List<(string Display, string Clave, int Ancho)>();
+
+        var todasExtras = _datos
+            .SelectMany(d => d.CamposExtra.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(k => k)
+            .ToList();
+
+        string ultimaFuente = _datos.Count > 0 ? _datos[^1].Fuente : "";
+
+        List<string>? readerCols = null;
+        Dictionary<string, string>? readerMapeo = null;
+
+        if (ultimaFuente == "csv" && CsvDataReader.UltimasColumnas.Count > 0)
+        { readerCols = CsvDataReader.UltimasColumnas; readerMapeo = CsvDataReader.MapeoColumnas; }
+        else if (ultimaFuente == "json" && JsonDataReader.UltimasColumnas.Count > 0)
+        { readerCols = JsonDataReader.UltimasColumnas; readerMapeo = JsonDataReader.MapeoColumnas; }
+        else if (ultimaFuente == "xml" && XmlDataReader.UltimasColumnas.Count > 0)
+        { readerCols = XmlDataReader.UltimasColumnas; readerMapeo = XmlDataReader.MapeoColumnas; }
+        else if (ultimaFuente == "txt" && TxtDataReader.UltimasColumnas.Count > 0)
+        { readerCols = TxtDataReader.UltimasColumnas; readerMapeo = TxtDataReader.MapeoColumnas; }
+
+        if (readerCols != null && readerMapeo != null)
+        {
+            var yaAgregadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var col in readerCols)
+            {
+                string clave = readerMapeo.TryGetValue(col, out var prop) ? prop.ToLower() : col.ToLowerInvariant();
+                _columnas.Add((col, clave, EstimarAncho(clave, col)));
+                yaAgregadas.Add(col.ToLowerInvariant());
+            }
+            if (!yaAgregadas.Contains("fuente"))
+                _columnas.Add(("Fuente", "fuente", 12));
+            foreach (var k in todasExtras.Where(k => !yaAgregadas.Contains(k.ToLowerInvariant())))
+                _columnas.Add((k, k.ToLowerInvariant(), Math.Clamp(k.Length + 2, 8, 25)));
+        }
+        else
+        {
+            _columnas.Add(("ID", "id", 6));
+            _columnas.Add(("Nombre", "nombre", 28));
+            _columnas.Add(("Categoría", "categoria", 18));
+            _columnas.Add(("Valor", "valor", 10));
+            _columnas.Add(("Fecha", "fecha", 12));
+            _columnas.Add(("Fuente", "fuente", 12));
+            var yaAgregadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "id", "nombre", "categoria", "valor", "fecha", "fuente" };
+            foreach (var k in todasExtras.Where(k => !yaAgregadas.Contains(k.ToLowerInvariant())))
+                _columnas.Add((k, k.ToLowerInvariant(), Math.Clamp(k.Length + 2, 8, 25)));
+        }
+
+        AjustarAnchosAlContenido();
+    }
+
+    static void AjustarAnchosAlContenido()
+    {
+        if (_datos.Count == 0) return;
+        var muestra = _datos.Count > 200 ? _datos.Take(200).ToList() : _datos;
+
+        for (int c = 0; c < _columnas.Count; c++)
+        {
+            var (display, clave, _) = _columnas[c];
+            int maxLen = display.Length;
+            foreach (var item in muestra)
+            {
+                int len = ObtenerValorCelda(item, clave).Length;
+                if (len > maxLen) maxLen = len;
+            }
+            _columnas[c] = (display, clave, Math.Clamp(maxLen, Math.Max(display.Length, 4), 35));
+        }
+    }
+
+    static int EstimarAncho(string clave, string display) => clave switch
+    {
+        "id" => Math.Max(6, display.Length),
+        "nombre" => Math.Max(20, display.Length),
+        "categoria" => Math.Max(15, display.Length),
+        "valor" => Math.Max(10, display.Length),
+        "fecha" => Math.Max(12, display.Length),
+        "fuente" => Math.Max(10, display.Length),
+        _ => Math.Max(12, display.Length)
+    };
+
+    static string ObtenerValorCelda(DataItem item, string clave) => clave switch
+    {
+        "id" => item.Id.ToString(),
+        "nombre" => item.Nombre,
+        "categoria" => item.Categoria,
+        "valor" => item.Valor.ToString("F2"),
+        "fecha" => item.Fecha.ToString("yyyy-MM-dd"),
+        "fuente" => item.Fuente,
+        _ => BuscarExtra(item, clave)
+    };
+
+    static string BuscarExtra(DataItem item, string clave)
+    {
+        if (item.CamposExtra.TryGetValue(clave, out var v)) return v;
+        foreach (var kv in item.CamposExtra)
+            if (string.Equals(kv.Key, clave, StringComparison.OrdinalIgnoreCase))
+                return kv.Value;
+        return "";
+    }
+
+    static List<string> ObtenerCamposDisponibles() =>
+        _columnas.Select(c => c.Clave).ToList();
+
+    // ══════════════════════════════════════════════════════════════
+    //  BANNER Y MENÚ
+    // ══════════════════════════════════════════════════════════════
 
     static void MostrarBanner()
     {
@@ -81,20 +205,21 @@ class Program
             case "9": GestionarDuplicados(); break;
             case "L": BonusLinq(); break;
             case "0": return false;
-            default:
-                Color(ConsoleColor.Red, "  ⚠  Opción no válida.\n");
-                break;
+            default: Color(ConsoleColor.Red, "  ⚠  Opción no válida.\n"); break;
         }
         return true;
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  NIVEL 1 y 2 – Carga de archivos
+    // ══════════════════════════════════════════════════════════════
+
     static void CargarArchivos()
     {
         Titulo("CARGAR ARCHIVOS DE DATOS");
-
         Console.WriteLine($"  Directorio de datos: {_dirDatos}\n");
         Console.WriteLine("  [1] JSON  – products.json");
-        Console.WriteLine("  [2] CSV   – sales.csv (columnas desordenadas)");
+        Console.WriteLine("  [2] CSV   – sales.csv");
         Console.WriteLine("  [3] XML   – employees.xml");
         Console.WriteLine("  [4] TXT   – records.txt");
         Console.WriteLine("  [5] Cargar TODOS los archivos");
@@ -116,12 +241,11 @@ class Program
                 CargarXml(Path.Combine(_dirDatos, "employees.xml"));
                 CargarTxt(Path.Combine(_dirDatos, "records.txt"));
                 break;
-            case "6":
-                CargarArchivoPersonalizado();
-                break;
+            case "6": CargarArchivoPersonalizado(); break;
         }
 
         ActualizarIndices();
+        ReconstruirColumnas();
         Color(ConsoleColor.Green, $"\n  ✅ Total acumulado: {_datos.Count} registros en memoria.");
     }
 
@@ -130,23 +254,14 @@ class Program
         Console.WriteLine("  Ingresa la ruta del archivo (puedes arrastrar el archivo aquí):");
         Console.Write("  > ");
         string? input = Console.ReadLine();
-
         if (string.IsNullOrWhiteSpace(input))
-        {
-            Color(ConsoleColor.Yellow, "  Ruta vacía, operación cancelada.");
-            return;
-        }
+        { Color(ConsoleColor.Yellow, "  Ruta vacía, operación cancelada."); return; }
 
         string ruta = input.Trim().Trim('"').Trim('\'').Trim();
-
         if (!File.Exists(ruta))
-        {
-            Color(ConsoleColor.Red, $" Archivo no encontrado:\n     {ruta}");
-            return;
-        }
+        { Color(ConsoleColor.Red, $" Archivo no encontrado:\n     {ruta}"); return; }
 
         string ext = Path.GetExtension(ruta).ToLowerInvariant();
-
         Color(ConsoleColor.Cyan, $"  Archivo detectado: {Path.GetFileName(ruta)} | Extensión: {ext}");
 
         switch (ext)
@@ -156,23 +271,17 @@ class Program
             case ".xml": CargarXml(ruta); break;
             case ".txt": CargarTxt(ruta); break;
             default:
-                Color(ConsoleColor.Red,
-                    $"  Extensión '{ext}' no soportada.\n" +
-                    $"     Formatos aceptados: .json  .csv  .xml  .txt");
+                Color(ConsoleColor.Red, $"  Extensión '{ext}' no soportada. Formatos: .json .csv .xml .txt");
                 break;
         }
     }
 
-    static void CargarJson(string ruta)
-    {
-        var nuevos = JsonDataReader.Leer(ruta);
-        DataProcessor.AgregarDatos(_datos, nuevos);
-    }
-    static void CargarCsv(string ruta)
-    {
-        var nuevos = CsvDataReader.Leer(ruta);
-        DataProcessor.AgregarDatos(_datos, nuevos);
-    }
+    static void CargarJson(string ruta) =>
+        DataProcessor.AgregarDatos(_datos, JsonDataReader.Leer(ruta));
+
+    static void CargarCsv(string ruta) =>
+        DataProcessor.AgregarDatos(_datos, CsvDataReader.Leer(ruta));
+
     static void CargarXml(string ruta)
     {
         var nuevos = XmlDataReader.Leer(ruta);
@@ -185,11 +294,13 @@ class Program
         }
         DataProcessor.AgregarDatos(_datos, nuevos);
     }
-    static void CargarTxt(string ruta)
-    {
-        var nuevos = TxtDataReader.Leer(ruta);
-        DataProcessor.AgregarDatos(_datos, nuevos);
-    }
+
+    static void CargarTxt(string ruta) =>
+        DataProcessor.AgregarDatos(_datos, TxtDataReader.Leer(ruta));
+
+    // ══════════════════════════════════════════════════════════════
+    //  NIVEL 3 – Bases de datos
+    // ══════════════════════════════════════════════════════════════
 
     static void ConectarBD()
     {
@@ -203,87 +314,82 @@ class Program
         {
             Console.Write("\n  Cadena de conexión PostgreSQL:\n  > ");
             string? cadena = Console.ReadLine()?.Trim();
-            if (string.IsNullOrEmpty(cadena))
-            {
-                Color(ConsoleColor.Yellow, "  Cadena vacía, operación cancelada.");
-                return;
-            }
-
+            if (string.IsNullOrEmpty(cadena)) { Color(ConsoleColor.Yellow, "  Cadena vacía, cancelado."); return; }
             Console.Write("  Nombre de tabla: ");
             string tabla = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(tabla))
-            {
-                Color(ConsoleColor.Yellow, "  Tabla vacía, operación cancelada.");
-                return;
-            }
+            if (string.IsNullOrEmpty(tabla)) { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
 
             var pg = new PostgreSqlConnector(cadena, tabla);
-
             Console.WriteLine("\n  Probando conexión...");
             if (pg.ProbarConexion(out string msg))
             {
                 Color(ConsoleColor.Green, $"  {msg}");
-                Console.WriteLine("  Cargando datos...");
                 var datos = pg.LeerDatos();
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
+                ReconstruirColumnas();
                 Color(ConsoleColor.Green, $"   {datos.Count} registros cargados desde PostgreSQL.");
             }
-            else
-                Color(ConsoleColor.Red, $"  ❌ {msg}");
+            else Color(ConsoleColor.Red, $"  ❌ {msg}");
         }
         else if (op == "2")
         {
             Console.Write("\n  Cadena de conexión MariaDB:\n  > ");
             string? cadena = Console.ReadLine()?.Trim();
-            if (string.IsNullOrEmpty(cadena))
-            {
-                Color(ConsoleColor.Yellow, "  Cadena vacía, operación cancelada.");
-                return;
-            }
-
+            if (string.IsNullOrEmpty(cadena)) { Color(ConsoleColor.Yellow, "  Cadena vacía, cancelado."); return; }
             Console.Write("  Nombre de tabla: ");
             string tabla = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(tabla))
-            {
-                Color(ConsoleColor.Yellow, "  Tabla vacía, operación cancelada.");
-                return;
-            }
+            if (string.IsNullOrEmpty(tabla)) { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
 
             var md = new MariaDbConnector(cadena, tabla);
-
             Console.WriteLine("\n  Probando conexión...");
             if (md.ProbarConexion(out string msg))
             {
                 Color(ConsoleColor.Green, $"  {msg}");
-                Console.WriteLine("  Cargando datos...");
                 var datos = md.LeerDatos();
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
+                ReconstruirColumnas();
                 Color(ConsoleColor.Green, $"   {datos.Count} registros cargados desde MariaDB.");
             }
-            else
-                Color(ConsoleColor.Red, $"  ❌ {msg}");
+            else Color(ConsoleColor.Red, $"  ❌ {msg}");
         }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  NIVEL 6 – Tabla DINÁMICA
+    // ══════════════════════════════════════════════════════════════
 
     static void VerTodos()
     {
         Titulo($"TODOS LOS DATOS ({_datos.Count} registros)");
         if (_datos.Count == 0) { Color(ConsoleColor.Yellow, "  Sin datos. Usa opción [1] para cargar."); return; }
-
         ImprimirTabla(_datos);
-
         Console.Write("\n  ENTER para continuar...");
         Console.ReadLine();
     }
 
     static void ImprimirTabla(List<DataItem> lista, int maxFilas = 50)
     {
-        string sep = new string('─', 100);
+        if (lista.Count == 0) { Color(ConsoleColor.Yellow, "  Sin registros."); return; }
+
+        int anchoTotal = _columnas.Sum(c => c.Ancho) + (_columnas.Count - 1) * 3 + 2;
+        string sep = new string('─', anchoTotal);
+
         Console.ForegroundColor = ConsoleColor.DarkCyan;
-        Console.WriteLine($"  {sep}");
-        Console.WriteLine($"  {"ID",5} │ {"Nombre",-28} │ {"Categoría",-18} │ {"Valor",10} │ {"Fecha",-12} │ Fuente");
+        Console.Write("  ");
+        for (int c = 0; c < _columnas.Count; c++)
+        {
+            var (display, clave, ancho) = _columnas[c];
+            string hdr = display.Length > ancho ? display[..ancho] : display;
+
+            // CORRECCIÓN: Usar PadLeft/PadRight en lugar de interpolación con coma
+            string celda = clave is "valor" or "id" ? hdr.PadLeft(ancho) : hdr.PadRight(ancho);
+            Console.Write(celda);
+
+            if (c < _columnas.Count - 1) Console.Write(" │ ");
+        }
+        Console.WriteLine();
         Console.WriteLine($"  {sep}");
         Console.ResetColor();
 
@@ -295,21 +401,49 @@ class Program
                 Color(ConsoleColor.Yellow, $"  ... {lista.Count - maxFilas} registros más (mostrando solo {maxFilas}).");
                 break;
             }
-            Console.Write($"  {item.Id,5} │ {item.Nombre,-28} │ {item.Categoria,-18} │ {item.Valor,10:F2} │ {item.Fecha:yyyy-MM-dd} │ ");
-            Color(FuenteColor(item.Fuente), item.Fuente);
+
+            Console.Write("  ");
+            for (int c = 0; c < _columnas.Count; c++)
+            {
+                var (_, clave, ancho) = _columnas[c];
+                string val = ObtenerValorCelda(item, clave);
+                if (val.Length > ancho) val = val[..(ancho - 1)] + "…";
+
+                if (clave == "fuente")
+                {
+                    Console.ForegroundColor = FuenteColor(val);
+                    Console.Write(val.PadRight(ancho)); // CORRECCIÓN
+                    Console.ResetColor();
+                }
+                else if (clave is "valor" or "id")
+                    Console.Write(val.PadLeft(ancho));  // CORRECCIÓN
+                else
+                    Console.Write(val.PadRight(ancho)); // CORRECCIÓN
+
+                if (c < _columnas.Count - 1) Console.Write(" │ ");
+            }
             Console.WriteLine();
             mostrados++;
         }
+
         Console.ForegroundColor = ConsoleColor.DarkCyan;
         Console.WriteLine($"  {sep}");
         Console.ResetColor();
     }
+    // ══════════════════════════════════════════════════════════════
+    //  NIVEL 5 – Filtrado y Ordenamiento (campos dinámicos)
+    // ══════════════════════════════════════════════════════════════
 
     static void FiltrarDatos()
     {
         Titulo("FILTRAR DATOS (Sin LINQ)");
-        Console.Write("  Campo a filtrar [nombre / categoria / fuente / id / valor]: ");
-        string campo = Console.ReadLine()?.Trim() ?? "nombre";
+        var campos = ObtenerCamposDisponibles();
+        Console.WriteLine("  Campos disponibles:");
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"  {string.Join(" / ", campos)}");
+        Console.ResetColor();
+        Console.Write("\n  Campo a filtrar: ");
+        string campo = Console.ReadLine()?.Trim().ToLower() ?? "nombre";
         Console.Write("  Valor a buscar: ");
         string valor = Console.ReadLine()?.Trim() ?? "";
 
@@ -321,16 +455,24 @@ class Program
     static void OrdenarDatos()
     {
         Titulo("ORDENAR DATOS (QuickSort/BubbleSort sin LINQ)");
-        Console.Write("  Campo [id / nombre / categoria / valor / fecha]: ");
-        string campo = Console.ReadLine()?.Trim() ?? "valor";
+        var campos = ObtenerCamposDisponibles();
+        Console.WriteLine("  Campos disponibles:");
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"  {string.Join(" / ", campos)}");
+        Console.ResetColor();
+        Console.Write("\n  Campo para ordenar: ");
+        string campo = Console.ReadLine()?.Trim().ToLower() ?? "valor";
         Console.Write("  Dirección [A = ascendente / D = descendente]: ");
         bool asc = (Console.ReadLine()?.Trim().ToUpper() ?? "A") != "D";
 
         var ordenados = DataProcessor.Ordenar(_datos, campo, asc);
-        string dir = asc ? "Ascendente ↑" : "Descendente ↓";
-        Color(ConsoleColor.Cyan, $"\n  Ordenado por '{campo}' {dir}\n");
+        Color(ConsoleColor.Cyan, $"\n  Ordenado por '{campo}' {(asc ? "Ascendente ↑" : "Descendente ↓")}\n");
         ImprimirTabla(ordenados);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  NIVEL 4 – Dictionary por categoría
+    // ══════════════════════════════════════════════════════════════
 
     static void VerPorCategoria()
     {
@@ -360,6 +502,10 @@ class Program
         }
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  NIVEL 5 – Estadísticas y Gráficas
+    // ══════════════════════════════════════════════════════════════
+
     static void MostrarEstadisticas()
     {
         Titulo("ESTADÍSTICAS POR CATEGORÍA");
@@ -388,21 +534,23 @@ class Program
 
         var stats = DataProcessor.CalcularEstadisticas(_datos);
         double maximo = stats.Values.Max(s => s.SumaValores);
-        int anchoMax = 50;
 
         Console.WriteLine();
         foreach (var s in stats.Values.OrderByDescending(x => x.SumaValores))
         {
-            int barras = maximo > 0 ? (int)(s.SumaValores / maximo * anchoMax) : 0;
-            string barra = new string('█', barras);
+            int barras = maximo > 0 ? (int)(s.SumaValores / maximo * 50) : 0;
             Console.Write($"  {s.Categoria,-22} │ ");
             Console.ForegroundColor = ColorBarra(s.Categoria);
-            Console.Write($"{barra,-50}");
+            Console.Write($"{new string('█', barras),-50}");
             Console.ResetColor();
             Console.WriteLine($" {s.SumaValores:N0}");
         }
         Console.WriteLine();
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  NIVEL 5 – Duplicados
+    // ══════════════════════════════════════════════════════════════
 
     static void GestionarDuplicados()
     {
@@ -410,10 +558,7 @@ class Program
         var dupes = DataProcessor.DetectarDuplicados(_datos);
 
         if (dupes.Count == 0)
-        {
-            Color(ConsoleColor.Green, $"  ✅ No se encontraron duplicados en {_datos.Count} registros.");
-            return;
-        }
+        { Color(ConsoleColor.Green, $"  ✅ No se encontraron duplicados en {_datos.Count} registros."); return; }
 
         Color(ConsoleColor.Yellow, $"  ⚠  Se encontraron {dupes.Count} duplicados:\n");
         ImprimirTabla(dupes);
@@ -429,6 +574,10 @@ class Program
             Color(ConsoleColor.Green, $"  ✅ Eliminados {antes - _datos.Count} duplicados. Quedan {_datos.Count} registros.");
         }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  BONUS – LINQ
+    // ══════════════════════════════════════════════════════════════
 
     static void BonusLinq()
     {
@@ -463,6 +612,10 @@ class Program
             ImprimirTabla(top);
         }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  HELPERS
+    // ══════════════════════════════════════════════════════════════
 
     static void ActualizarIndices()
     {
