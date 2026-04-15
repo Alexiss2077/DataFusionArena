@@ -13,6 +13,11 @@ class Program
 
     static List<(string Display, string Clave, int Ancho)> _columnas = ObtenerColumnasDefault();
 
+    // ── Columnas del último conector de BD (mariadb / postgresql) ──
+    static List<string> _ultimasColumnasBD = new();
+    static Dictionary<string, string> _ultimoMapeoBD = new();
+    static string _ultimaFuenteBD = "";
+
     static readonly string _dirDatos = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SampleData");
 
     static void Main(string[] args)
@@ -58,20 +63,41 @@ class Program
         Dictionary<string, string>? readerMapeo = null;
 
         if (ultimaFuente == "csv" && CsvDataReader.UltimasColumnas.Count > 0)
-        { readerCols = CsvDataReader.UltimasColumnas; readerMapeo = CsvDataReader.MapeoColumnas; }
+        {
+            readerCols = CsvDataReader.UltimasColumnas;
+            readerMapeo = CsvDataReader.MapeoColumnas;
+        }
         else if (ultimaFuente == "json" && JsonDataReader.UltimasColumnas.Count > 0)
-        { readerCols = JsonDataReader.UltimasColumnas; readerMapeo = JsonDataReader.MapeoColumnas; }
+        {
+            readerCols = JsonDataReader.UltimasColumnas;
+            readerMapeo = JsonDataReader.MapeoColumnas;
+        }
         else if (ultimaFuente == "xml" && XmlDataReader.UltimasColumnas.Count > 0)
-        { readerCols = XmlDataReader.UltimasColumnas; readerMapeo = XmlDataReader.MapeoColumnas; }
+        {
+            readerCols = XmlDataReader.UltimasColumnas;
+            readerMapeo = XmlDataReader.MapeoColumnas;
+        }
         else if (ultimaFuente == "txt" && TxtDataReader.UltimasColumnas.Count > 0)
-        { readerCols = TxtDataReader.UltimasColumnas; readerMapeo = TxtDataReader.MapeoColumnas; }
+        {
+            readerCols = TxtDataReader.UltimasColumnas;
+            readerMapeo = TxtDataReader.MapeoColumnas;
+        }
+        // ── Bases de datos: usar columnas exactas del conector ───────
+        else if ((ultimaFuente == "mariadb" || ultimaFuente == "postgresql")
+                 && _ultimasColumnasBD.Count > 0)
+        {
+            readerCols = _ultimasColumnasBD;
+            readerMapeo = _ultimoMapeoBD;
+        }
 
         if (readerCols != null && readerMapeo != null)
         {
             var yaAgregadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var col in readerCols)
             {
-                string clave = readerMapeo.TryGetValue(col, out var prop) ? prop.ToLower() : col.ToLowerInvariant();
+                string clave = readerMapeo.TryGetValue(col, out var prop)
+                    ? prop.ToLower()
+                    : col.ToLowerInvariant();
                 _columnas.Add((col, clave, EstimarAncho(clave, col)));
                 yaAgregadas.Add(col.ToLowerInvariant());
             }
@@ -132,7 +158,9 @@ class Program
         "nombre" => item.Nombre,
         "categoria" => item.Categoria,
         "valor" => item.Valor.ToString("F2"),
-        "fecha" => item.Fecha == new DateTime(item.Fecha.Year, 1, 1) ? item.Fecha.Year.ToString() : item.Fecha.ToString("yyyy-MM-dd"),
+        "fecha" => item.Fecha == new DateTime(item.Fecha.Year, 1, 1)
+                           ? item.Fecha.Year.ToString()
+                           : item.Fecha.ToString("yyyy-MM-dd"),
         "fuente" => item.Fuente,
         _ => BuscarExtra(item, clave)
     };
@@ -259,7 +287,7 @@ class Program
 
         string ruta = input.Trim().Trim('"').Trim('\'').Trim();
         if (!File.Exists(ruta))
-        { Color(ConsoleColor.Red, $" Archivo no encontrado:\n     {ruta}"); return; }
+        { Color(ConsoleColor.Red, $"  Archivo no encontrado:\n     {ruta}"); return; }
 
         string ext = Path.GetExtension(ruta).ToLowerInvariant();
         Color(ConsoleColor.Cyan, $"  Archivo detectado: {Path.GetFileName(ruta)} | Extensión: {ext}");
@@ -299,7 +327,7 @@ class Program
         DataProcessor.AgregarDatos(_datos, TxtDataReader.Leer(ruta));
 
     // ══════════════════════════════════════════════════════════════
-    //  NIVEL 3 – Bases de datos
+    //  NIVEL 3 – Bases de datos  (campos individuales)
     // ══════════════════════════════════════════════════════════════
 
     static void ConectarBD()
@@ -320,7 +348,8 @@ class Program
 
             Console.Write("  Base de datos:               ");
             string db = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(db)) { Color(ConsoleColor.Yellow, "  Base de datos vacía, cancelado."); return; }
+            if (string.IsNullOrEmpty(db))
+            { Color(ConsoleColor.Yellow, "  Base de datos vacía, cancelado."); return; }
 
             Console.Write("  Usuario (default: postgres):  ");
             string user = Console.ReadLine()?.Trim() is { Length: > 0 } u ? u : "postgres";
@@ -330,7 +359,8 @@ class Program
 
             Console.Write("  Nombre de tabla:             ");
             string tabla = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(tabla)) { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
+            if (string.IsNullOrEmpty(tabla))
+            { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
 
             string cadena = $"Host={host};Port={port};Database={db};Username={user};Password={pass};";
 
@@ -340,10 +370,16 @@ class Program
             {
                 Color(ConsoleColor.Green, $"  {msg}");
                 var datos = pg.LeerDatos();
+
+                // Guardar columnas exactas del conector antes de agregar datos
+                _ultimasColumnasBD = pg.UltimasColumnas;
+                _ultimoMapeoBD = pg.MapeoColumnas;
+                _ultimaFuenteBD = "postgresql";
+
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
                 ReconstruirColumnas();
-                Color(ConsoleColor.Green, $"  ✅ {datos.Count} registros cargados desde PostgreSQL.");
+                Color(ConsoleColor.Green, $"\n  ✅ {datos.Count} registros cargados desde PostgreSQL.");
             }
             else Color(ConsoleColor.Red, $"  ❌ {msg}");
         }
@@ -357,7 +393,8 @@ class Program
 
             Console.Write("  Base de datos:               ");
             string db = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(db)) { Color(ConsoleColor.Yellow, "  Base de datos vacía, cancelado."); return; }
+            if (string.IsNullOrEmpty(db))
+            { Color(ConsoleColor.Yellow, "  Base de datos vacía, cancelado."); return; }
 
             Console.Write("  Usuario (default: root):     ");
             string user = Console.ReadLine()?.Trim() is { Length: > 0 } u ? u : "root";
@@ -367,7 +404,8 @@ class Program
 
             Console.Write("  Nombre de tabla:             ");
             string tabla = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(tabla)) { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
+            if (string.IsNullOrEmpty(tabla))
+            { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
 
             string cadena = $"Server={host};Port={port};Database={db};User={user};Password={pass};";
 
@@ -377,35 +415,21 @@ class Program
             {
                 Color(ConsoleColor.Green, $"  {msg}");
                 var datos = md.LeerDatos();
+
+                // Guardar columnas exactas del conector antes de agregar datos
+                _ultimasColumnasBD = md.UltimasColumnas;
+                _ultimoMapeoBD = md.MapeoColumnas;
+                _ultimaFuenteBD = "mariadb";
+
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
                 ReconstruirColumnas();
-                Color(ConsoleColor.Green, $"  ✅ {datos.Count} registros cargados desde MariaDB.");
+                Color(ConsoleColor.Green, $"\n  ✅ {datos.Count} registros cargados desde MariaDB.");
             }
             else Color(ConsoleColor.Red, $"  ❌ {msg}");
         }
     }
 
-    static string LeerContraseña()
-    {
-        var sb = new System.Text.StringBuilder();
-        ConsoleKeyInfo key;
-        while ((key = Console.ReadKey(intercept: true)).Key != ConsoleKey.Enter)
-        {
-            if (key.Key == ConsoleKey.Backspace && sb.Length > 0)
-            {
-                sb.Remove(sb.Length - 1, 1);
-                Console.Write("\b \b");
-            }
-            else if (key.Key != ConsoleKey.Backspace)
-            {
-                sb.Append(key.KeyChar);
-                Console.Write('*');
-            }
-        }
-        Console.WriteLine();
-        return sb.ToString();
-    }
     // ══════════════════════════════════════════════════════════════
     //  NIVEL 6 – Tabla DINÁMICA
     // ══════════════════════════════════════════════════════════════
@@ -432,11 +456,8 @@ class Program
         {
             var (display, clave, ancho) = _columnas[c];
             string hdr = display.Length > ancho ? display[..ancho] : display;
-
-            // CORRECCIÓN: Usar PadLeft/PadRight en lugar de interpolación con coma
             string celda = clave is "valor" or "id" ? hdr.PadLeft(ancho) : hdr.PadRight(ancho);
             Console.Write(celda);
-
             if (c < _columnas.Count - 1) Console.Write(" │ ");
         }
         Console.WriteLine();
@@ -462,13 +483,13 @@ class Program
                 if (clave == "fuente")
                 {
                     Console.ForegroundColor = FuenteColor(val);
-                    Console.Write(val.PadRight(ancho)); // CORRECCIÓN
+                    Console.Write(val.PadRight(ancho));
                     Console.ResetColor();
                 }
                 else if (clave is "valor" or "id")
-                    Console.Write(val.PadLeft(ancho));  // CORRECCIÓN
+                    Console.Write(val.PadLeft(ancho));
                 else
-                    Console.Write(val.PadRight(ancho)); // CORRECCIÓN
+                    Console.Write(val.PadRight(ancho));
 
                 if (c < _columnas.Count - 1) Console.Write(" │ ");
             }
@@ -480,6 +501,7 @@ class Program
         Console.WriteLine($"  {sep}");
         Console.ResetColor();
     }
+
     // ══════════════════════════════════════════════════════════════
     //  NIVEL 5 – Filtrado y Ordenamiento (campos dinámicos)
     // ══════════════════════════════════════════════════════════════
@@ -673,6 +695,28 @@ class Program
         _porId = DataProcessor.IndexarPorId(_datos);
     }
 
+    /// <summary>Lee la contraseña ocultando los caracteres con asteriscos.</summary>
+    static string LeerContraseña()
+    {
+        var sb = new System.Text.StringBuilder();
+        ConsoleKeyInfo key;
+        while ((key = Console.ReadKey(intercept: true)).Key != ConsoleKey.Enter)
+        {
+            if (key.Key == ConsoleKey.Backspace && sb.Length > 0)
+            {
+                sb.Remove(sb.Length - 1, 1);
+                Console.Write("\b \b");
+            }
+            else if (key.Key != ConsoleKey.Backspace)
+            {
+                sb.Append(key.KeyChar);
+                Console.Write('*');
+            }
+        }
+        Console.WriteLine();
+        return sb.ToString();
+    }
+
     static void Titulo(string texto)
     {
         Console.ForegroundColor = ConsoleColor.Cyan;
@@ -704,8 +748,8 @@ class Program
     static ConsoleColor ColorBarra(string categoria)
     {
         var colores = new[] {
-            ConsoleColor.Green, ConsoleColor.Cyan, ConsoleColor.Yellow,
-            ConsoleColor.Magenta, ConsoleColor.Blue, ConsoleColor.Red,
+            ConsoleColor.Green,    ConsoleColor.Cyan,    ConsoleColor.Yellow,
+            ConsoleColor.Magenta,  ConsoleColor.Blue,    ConsoleColor.Red,
             ConsoleColor.DarkCyan, ConsoleColor.DarkGreen
         };
         return colores[Math.Abs(categoria.GetHashCode()) % colores.Length];

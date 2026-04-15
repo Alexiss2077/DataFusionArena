@@ -8,7 +8,15 @@ public class MariaDbConnector
     public string CadenaConexion { get; set; } = "";
     public string Tabla { get; set; } = "";
     public int LimiteFilas { get; set; } = 0;
+
+    /// <summary>Nombres de columna en el orden original de la tabla.</summary>
     public List<string> UltimasColumnas { get; private set; } = new();
+
+    /// <summary>
+    /// Mapeo columna-original → clave-interna.
+    /// Claves internas: "id" | "nombre" | "categoria" | "valor" | "fecha"
+    /// Las columnas sin mapeo se almacenan en CamposExtra.
+    /// </summary>
     public Dictionary<string, string> MapeoColumnas { get; private set; } =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -38,35 +46,54 @@ public class MariaDbConnector
             cmd.CommandTimeout = 120;
             using var reader = cmd.ExecuteReader();
 
+            // ── Índice nombre-de-columna → posición ─────────────────
             var mapa = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < reader.FieldCount; i++)
                 mapa[reader.GetName(i)] = i;
 
+            // ── Guardar columnas en orden original ───────────────────
             UltimasColumnas = Enumerable.Range(0, reader.FieldCount)
-                .Select(i => reader.GetName(i)).ToList();
+                .Select(i => reader.GetName(i))
+                .ToList();
+
+            // ── Construir MapeoColumnas con claves en MINÚSCULAS ─────
+            // Así ReconstruirColumnas() puede emparejar correctamente.
             MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            {
-                string? _c;
-                _c = PrimeraColumna(mapa, "id");
-                if (_c != null) MapeoColumnas[_c] = "id";
 
-                _c = PrimeraColumna(mapa, "nombre", "name", "jugador", "pais", "country",
-                    "titulo", "title", "producto", "descripcion", "description", "player", "empleado", "employee");
-                if (_c != null) MapeoColumnas[_c] = "nombre";
+            string? col;
+            col = PrimeraColumna(mapa,
+                "id");
+            if (col != null) MapeoColumnas[col] = "id";
 
-                _c = PrimeraColumna(mapa, "categoria", "category", "nivel", "genero", "genre",
-                    "region", "tipo", "type", "grupo", "group", "departamento", "department", "clase", "class");
-                if (_c != null) MapeoColumnas[_c] = "categoria";
+            col = PrimeraColumna(mapa,
+                "nombre", "name", "jugador", "pais", "country",
+                "titulo", "title", "producto", "descripcion", "description",
+                "player", "empleado", "employee");
+            if (col != null) MapeoColumnas[col] = "nombre";
 
-                _c = PrimeraColumna(mapa, "valor", "value", "puntos", "score", "puntaje",
-                    "precio", "price", "monto", "amount", "ventas", "sales", "total", "suma",
-                    "salario", "salary", "ventas_global", "rating", "calificacion");
-                if (_c != null) MapeoColumnas[_c] = "valor";
+            col = PrimeraColumna(mapa,
+                "categoria", "category", "nivel", "genero", "genre",
+                "region", "tipo", "type", "grupo", "group",
+                "departamento", "department", "clase", "class");
+            if (col != null) MapeoColumnas[col] = "categoria";
 
-                _c = PrimeraColumna(mapa, "fecha", "date", "fecha_registro", "fecha_reporte",
-                    "fecha_lanzamiento", "created_at", "updated_at", "timestamp", "anio", "year");
-                if (_c != null) MapeoColumnas[_c] = "fecha";
-            }
+            col = PrimeraColumna(mapa,
+                "valor", "value", "puntos", "score", "puntaje",
+                "precio", "price", "monto", "amount", "ventas", "sales",
+                "total", "suma", "salario", "salary", "ventas_global",
+                "rating", "calificacion");
+            if (col != null) MapeoColumnas[col] = "valor";
+
+            col = PrimeraColumna(mapa,
+                "fecha", "date", "fecha_registro", "fecha_reporte",
+                "fecha_lanzamiento", "created_at", "updated_at",
+                "timestamp", "anio", "year");
+            if (col != null) MapeoColumnas[col] = "fecha";
+
+            // ── Leer registros ───────────────────────────────────────
+            // El conjunto de columnas que YA están mapeadas a propiedades estándar
+            var mapeadasSet = new HashSet<string>(
+                MapeoColumnas.Keys, StringComparer.OrdinalIgnoreCase);
 
             int contador = 1;
             while (reader.Read())
@@ -74,23 +101,38 @@ public class MariaDbConnector
                 var item = new DataItem { Fuente = "mariadb" };
 
                 item.Id = LeerInt(reader, mapa, "id") ?? contador;
-                item.Nombre = LeerStr(reader, mapa, "nombre", "name", "jugador", "pais", "country",
-                    "titulo", "title", "producto", "player", "empleado", "employee") ??
-                    FallbackStr(reader, mapa, "id") ?? $"Registro-{contador}";
-                item.Categoria = LeerStr(reader, mapa, "categoria", "category", "nivel", "genero", "genre",
-                    "region", "tipo", "type", "grupo", "group", "departamento", "department") ??
-                    FallbackStr(reader, mapa, "id", "nombre", "name", "jugador", "pais", "country",
-                        "titulo", "title", "producto", "player", "empleado", "employee",
-                        "valor", "value", "puntos", "score", "puntaje", "precio", "price",
-                        "monto", "amount", "ventas", "sales", "total", "suma", "salario", "salary",
-                        "ventas_global", "fecha", "date", "fecha_registro", "fecha_reporte") ?? "Sin categoría";
-                item.Valor = LeerDbl(reader, mapa, "valor", "value", "puntos", "score", "puntaje",
-                    "precio", "price", "monto", "amount", "ventas", "sales", "total", "suma",
-                    "salario", "salary", "ventas_global", "rating", "calificacion") ?? 0;
-                item.Fecha = LeerDate(reader, mapa, "fecha", "date", "fecha_registro", "fecha_reporte",
-                    "fecha_lanzamiento", "created_at", "updated_at", "timestamp") ?? DateTime.Now;
+                item.Nombre = LeerStr(reader, mapa,
+                                    "nombre", "name", "jugador", "pais", "country",
+                                    "titulo", "title", "producto", "player",
+                                    "empleado", "employee")
+                                ?? FallbackStr(reader, mapa, "id")
+                                ?? $"Registro-{contador}";
+                item.Categoria = LeerStr(reader, mapa,
+                                    "categoria", "category", "nivel", "genero", "genre",
+                                    "region", "tipo", "type", "grupo", "group",
+                                    "departamento", "department")
+                                ?? FallbackStr(reader, mapa,
+                                    "id", "nombre", "name", "jugador", "pais", "country",
+                                    "titulo", "title", "producto", "player", "empleado",
+                                    "employee", "valor", "value", "puntos", "score",
+                                    "puntaje", "precio", "price", "monto", "amount",
+                                    "ventas", "sales", "total", "suma", "salario",
+                                    "salary", "ventas_global", "fecha", "date",
+                                    "fecha_registro", "fecha_reporte")
+                                ?? "Sin categoría";
+                item.Valor = LeerDbl(reader, mapa,
+                                    "valor", "value", "puntos", "score", "puntaje",
+                                    "precio", "price", "monto", "amount", "ventas",
+                                    "sales", "total", "suma", "salario", "salary",
+                                    "ventas_global", "rating", "calificacion")
+                                ?? 0;
+                item.Fecha = LeerDate(reader, mapa,
+                                    "fecha", "date", "fecha_registro", "fecha_reporte",
+                                    "fecha_lanzamiento", "created_at", "updated_at",
+                                    "timestamp")
+                                ?? DateTime.Now;
 
-                var mapeadasSet = new HashSet<string>(MapeoColumnas.Keys, StringComparer.OrdinalIgnoreCase);
+                // Columnas NO mapeadas → CamposExtra
                 foreach (var kv in mapa)
                 {
                     if (mapeadasSet.Contains(kv.Key)) continue;
@@ -134,10 +176,13 @@ public class MariaDbConnector
         }
     }
 
+    // ── Helpers de lectura ───────────────────────────────────────
+
     private static string? LeerStr(MySqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
-            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i)) return r[i].ToString();
+            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i))
+                return r[i].ToString();
         return null;
     }
 
@@ -156,7 +201,9 @@ public class MariaDbConnector
     private static int? LeerInt(MySqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
-            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) && int.TryParse(r[i].ToString(), out int v)) return v;
+            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) &&
+                int.TryParse(r[i].ToString(), out int v))
+                return v;
         return null;
     }
 
@@ -164,15 +211,20 @@ public class MariaDbConnector
     {
         foreach (var c in claves)
             if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) &&
-                double.TryParse(r[i].ToString(), System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out double v)) return v;
+                double.TryParse(r[i].ToString(),
+                    System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out double v))
+                return v;
         return null;
     }
 
     private static DateTime? LeerDate(MySqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
-            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) && DateTime.TryParse(r[i].ToString(), out DateTime d)) return d;
+            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) &&
+                DateTime.TryParse(r[i].ToString(), out DateTime d))
+                return d;
         return null;
     }
 

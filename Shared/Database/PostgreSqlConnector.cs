@@ -8,7 +8,15 @@ public class PostgreSqlConnector
     public string CadenaConexion { get; set; } = "";
     public string Tabla { get; set; } = "";
     public int LimiteFilas { get; set; } = 0;
+
+    /// <summary>Nombres de columna en el orden original de la tabla.</summary>
     public List<string> UltimasColumnas { get; private set; } = new();
+
+    /// <summary>
+    /// Mapeo columna-original → clave-interna.
+    /// Claves internas: "id" | "nombre" | "categoria" | "valor" | "fecha"
+    /// Las columnas sin mapeo se almacenan en CamposExtra.
+    /// </summary>
     public Dictionary<string, string> MapeoColumnas { get; private set; } =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -45,36 +53,53 @@ public class PostgreSqlConnector
             cmd.CommandTimeout = 120;
             using var reader = cmd.ExecuteReader();
 
+            // ── Índice nombre-de-columna → posición ─────────────────
             var mapa = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < reader.FieldCount; i++)
                 mapa[reader.GetName(i)] = i;
 
+            // ── Guardar columnas en orden original ───────────────────
             UltimasColumnas = Enumerable.Range(0, reader.FieldCount)
-                .Select(i => reader.GetName(i)).ToList();
+                .Select(i => reader.GetName(i))
+                .ToList();
+
+            // ── Construir MapeoColumnas con claves en MINÚSCULAS ─────
             MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            {
-                string? _c;
-                _c = PrimeraColumna(mapa, "id");
-                if (_c != null) MapeoColumnas[_c] = "id";
 
-                _c = PrimeraColumna(mapa, "nombre", "name", "titulo", "title", "producto",
-                    "pais", "country", "jugador", "player", "descripcion", "description", "empleado", "employee");
-                if (_c != null) MapeoColumnas[_c] = "nombre";
+            string? col;
+            col = PrimeraColumna(mapa,
+                "id");
+            if (col != null) MapeoColumnas[col] = "id";
 
-                _c = PrimeraColumna(mapa, "categoria", "category", "genero", "genre",
-                    "region", "tipo", "type", "grupo", "group", "departamento", "department",
-                    "nivel", "level", "clase", "class");
-                if (_c != null) MapeoColumnas[_c] = "categoria";
+            col = PrimeraColumna(mapa,
+                "nombre", "name", "titulo", "title", "producto",
+                "pais", "country", "jugador", "player",
+                "descripcion", "description", "empleado", "employee");
+            if (col != null) MapeoColumnas[col] = "nombre";
 
-                _c = PrimeraColumna(mapa, "valor", "value", "precio", "price", "ventas_global",
-                    "ventas", "sales", "puntaje", "score", "puntos", "points", "monto", "amount",
-                    "total", "suma", "salario", "salary", "rating", "calificacion");
-                if (_c != null) MapeoColumnas[_c] = "valor";
+            col = PrimeraColumna(mapa,
+                "categoria", "category", "genero", "genre",
+                "region", "tipo", "type", "grupo", "group",
+                "departamento", "department", "nivel", "level",
+                "clase", "class");
+            if (col != null) MapeoColumnas[col] = "categoria";
 
-                _c = PrimeraColumna(mapa, "fecha", "date", "fecha_lanzamiento", "anio", "year",
-                    "fecha_registro", "fecha_reporte", "created_at", "updated_at", "timestamp");
-                if (_c != null) MapeoColumnas[_c] = "fecha";
-            }
+            col = PrimeraColumna(mapa,
+                "valor", "value", "precio", "price", "ventas_global",
+                "ventas", "sales", "puntaje", "score", "puntos", "points",
+                "monto", "amount", "total", "suma", "salario", "salary",
+                "rating", "calificacion");
+            if (col != null) MapeoColumnas[col] = "valor";
+
+            col = PrimeraColumna(mapa,
+                "fecha", "date", "fecha_lanzamiento", "anio", "year",
+                "fecha_registro", "fecha_reporte",
+                "created_at", "updated_at", "timestamp");
+            if (col != null) MapeoColumnas[col] = "fecha";
+
+            // ── Leer registros ───────────────────────────────────────
+            var mapeadasSet = new HashSet<string>(
+                MapeoColumnas.Keys, StringComparer.OrdinalIgnoreCase);
 
             int contador = 1;
             while (reader.Read())
@@ -82,22 +107,37 @@ public class PostgreSqlConnector
                 var item = new DataItem { Fuente = "postgresql" };
 
                 item.Id = LeerInt(reader, mapa, "id") ?? contador;
-                item.Nombre = LeerStr(reader, mapa, "nombre", "name", "titulo", "title", "producto",
-                    "pais", "country", "jugador", "player", "empleado", "employee") ??
-                    FallbackStr(reader, mapa, "id") ?? $"Registro-{contador}";
-                item.Categoria = LeerStr(reader, mapa, "categoria", "category", "genero", "genre",
-                    "region", "tipo", "type", "grupo", "group", "departamento", "department") ??
-                    FallbackStr(reader, mapa, "id", "nombre", "name", "titulo", "title", "producto",
-                        "pais", "country", "jugador", "player", "empleado", "employee",
-                        "valor", "value", "precio", "price", "ventas_global", "ventas", "sales",
-                        "puntaje", "score", "puntos", "fecha", "date", "fecha_lanzamiento", "anio") ?? "Sin categoría";
-                item.Valor = LeerDbl(reader, mapa, "valor", "value", "precio", "price", "ventas_global",
-                    "ventas", "sales", "puntaje", "score", "puntos", "points", "monto", "amount",
-                    "total", "suma", "salario", "salary", "rating", "calificacion") ?? 0;
-                item.Fecha = LeerDate(reader, mapa, "fecha", "date", "fecha_lanzamiento", "anio",
-                    "fecha_registro", "fecha_reporte", "created_at", "updated_at", "timestamp") ?? DateTime.Now;
+                item.Nombre = LeerStr(reader, mapa,
+                                    "nombre", "name", "titulo", "title", "producto",
+                                    "pais", "country", "jugador", "player",
+                                    "empleado", "employee")
+                                ?? FallbackStr(reader, mapa, "id")
+                                ?? $"Registro-{contador}";
+                item.Categoria = LeerStr(reader, mapa,
+                                    "categoria", "category", "genero", "genre",
+                                    "region", "tipo", "type", "grupo", "group",
+                                    "departamento", "department")
+                                ?? FallbackStr(reader, mapa,
+                                    "id", "nombre", "name", "titulo", "title",
+                                    "producto", "pais", "country", "jugador", "player",
+                                    "empleado", "employee", "valor", "value", "precio",
+                                    "price", "ventas_global", "ventas", "sales",
+                                    "puntaje", "score", "puntos", "fecha", "date",
+                                    "fecha_lanzamiento", "anio")
+                                ?? "Sin categoría";
+                item.Valor = LeerDbl(reader, mapa,
+                                    "valor", "value", "precio", "price", "ventas_global",
+                                    "ventas", "sales", "puntaje", "score", "puntos",
+                                    "points", "monto", "amount", "total", "suma",
+                                    "salario", "salary", "rating", "calificacion")
+                                ?? 0;
+                item.Fecha = LeerDate(reader, mapa,
+                                    "fecha", "date", "fecha_lanzamiento", "anio",
+                                    "fecha_registro", "fecha_reporte",
+                                    "created_at", "updated_at", "timestamp")
+                                ?? DateTime.Now;
 
-                var mapeadasSet = new HashSet<string>(MapeoColumnas.Keys, StringComparer.OrdinalIgnoreCase);
+                // Columnas NO mapeadas → CamposExtra
                 foreach (var kv in mapa)
                 {
                     if (mapeadasSet.Contains(kv.Key)) continue;
@@ -145,16 +185,20 @@ public class PostgreSqlConnector
     {
         var cols = new List<string>();
         using var cmd = new NpgsqlCommand(
-            $"SELECT column_name FROM information_schema.columns WHERE table_name='{tabla.ToLower()}'", conn);
+            $"SELECT column_name FROM information_schema.columns WHERE table_name='{tabla.ToLower()}'",
+            conn);
         using var r = cmd.ExecuteReader();
         while (r.Read()) cols.Add(r.GetString(0));
         return cols;
     }
 
+    // ── Helpers de lectura ───────────────────────────────────────
+
     private static string? LeerStr(NpgsqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
-            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i)) return r[i].ToString();
+            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i))
+                return r[i].ToString();
         return null;
     }
 
@@ -173,7 +217,9 @@ public class PostgreSqlConnector
     private static int? LeerInt(NpgsqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
-            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) && int.TryParse(r[i].ToString(), out int v)) return v;
+            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) &&
+                int.TryParse(r[i].ToString(), out int v))
+                return v;
         return null;
     }
 
@@ -181,15 +227,20 @@ public class PostgreSqlConnector
     {
         foreach (var c in claves)
             if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) &&
-                double.TryParse(r[i].ToString(), System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out double v)) return v;
+                double.TryParse(r[i].ToString(),
+                    System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out double v))
+                return v;
         return null;
     }
 
     private static DateTime? LeerDate(NpgsqlDataReader r, Dictionary<string, int> m, params string[] claves)
     {
         foreach (var c in claves)
-            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) && DateTime.TryParse(r[i].ToString(), out DateTime d)) return d;
+            if (m.TryGetValue(c, out int i) && !r.IsDBNull(i) &&
+                DateTime.TryParse(r[i].ToString(), out DateTime d))
+                return d;
         return null;
     }
 
