@@ -64,7 +64,7 @@ public partial class MainForm : Form
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  HELPERS DE COLUMNAS / COMBOBOXES
+    //  HELPERS DE COLUMNAS
     // ══════════════════════════════════════════════════════════════
 
     private string TraducirClave(string display)
@@ -100,26 +100,22 @@ public partial class MainForm : Form
             BuildInfoColumnasFromConnector(_lastMdConnector!.UltimasColumnas, _lastMdConnector.MapeoColumnas);
         else
         {
-            foreach (var col in _colsDefault)
-                _infoColumnas.Add(col);
-            foreach (var k in _datos
-                .SelectMany(d => d.CamposExtra.Keys)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(k => k))
+            foreach (var col in _colsDefault) _infoColumnas.Add(col);
+            foreach (var k in _datos.SelectMany(d => d.CamposExtra.Keys)
+                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(k => k))
                 _infoColumnas.Add((k, k.ToLower()));
         }
     }
 
-    private void BuildInfoColumnasFromReader(
-        List<string> columnas, Dictionary<string, string> mapeo)
+    private void BuildInfoColumnasFromReader(List<string> columnas, Dictionary<string, string> mapeo)
     {
-        var yaAgregadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ya = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var col in columnas)
         {
             if (mapeo.TryGetValue(col, out var prop))
             {
-                string propLow = prop.ToLower();
-                _infoColumnas.Add(propLow switch
+                string p = prop.ToLower();
+                _infoColumnas.Add(p switch
                 {
                     "id" => (col, "id"),
                     "nombre" => (col, "nombre"),
@@ -129,46 +125,27 @@ public partial class MainForm : Form
                     _ => (col, col.ToLowerInvariant())
                 });
             }
-            else
-                _infoColumnas.Add((col, col.ToLowerInvariant()));
-            yaAgregadas.Add(col.ToLowerInvariant());
+            else _infoColumnas.Add((col, col.ToLowerInvariant()));
+            ya.Add(col.ToLowerInvariant());
         }
-        if (!yaAgregadas.Contains("fuente"))
-            _infoColumnas.Add(("Fuente", "fuente"));
-        foreach (var k in _datos
-            .SelectMany(d => d.CamposExtra.Keys)
+        if (!ya.Contains("fuente")) _infoColumnas.Add(("Fuente", "fuente"));
+        foreach (var k in _datos.SelectMany(d => d.CamposExtra.Keys)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Where(k => !yaAgregadas.Contains(k.ToLowerInvariant()))
-            .OrderBy(k => k))
-        {
-            _infoColumnas.Add((k, k.ToLowerInvariant()));
-            yaAgregadas.Add(k.ToLowerInvariant());
-        }
+            .Where(k => !ya.Contains(k.ToLowerInvariant())).OrderBy(k => k))
+        { _infoColumnas.Add((k, k.ToLowerInvariant())); ya.Add(k.ToLowerInvariant()); }
     }
 
-    private void BuildInfoColumnasFromConnector(
-        List<string> columnas, Dictionary<string, string> mapeo)
+    private void BuildInfoColumnasFromConnector(List<string> columnas, Dictionary<string, string> mapeo)
     {
         foreach (var col in columnas)
-        {
-            if (mapeo.TryGetValue(col, out var prop))
-                _infoColumnas.Add((col, prop.ToLower()));
-            else
-                _infoColumnas.Add((col, col.ToLowerInvariant()));
-        }
-        var yaExisten = new HashSet<string>(
-            _infoColumnas.Select(c => c.Clave), StringComparer.OrdinalIgnoreCase);
-        if (!yaExisten.Contains("fuente"))
-            _infoColumnas.Add(("Fuente", "fuente"));
-        foreach (var k in _datos
-            .SelectMany(d => d.CamposExtra.Keys)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Where(k => !yaExisten.Contains(k))
-            .OrderBy(k => k))
-        {
-            _infoColumnas.Add((k, k.ToLowerInvariant()));
-            yaExisten.Add(k);
-        }
+            _infoColumnas.Add(mapeo.TryGetValue(col, out var prop)
+                ? (col, prop.ToLower()) : (col, col.ToLowerInvariant()));
+
+        var ya = new HashSet<string>(_infoColumnas.Select(c => c.Clave), StringComparer.OrdinalIgnoreCase);
+        if (!ya.Contains("fuente")) _infoColumnas.Add(("Fuente", "fuente"));
+        foreach (var k in _datos.SelectMany(d => d.CamposExtra.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase).Where(k => !ya.Contains(k)).OrderBy(k => k))
+        { _infoColumnas.Add((k, k.ToLowerInvariant())); ya.Add(k); }
     }
 
     private void RefrescarComboboxes()
@@ -176,42 +153,35 @@ public partial class MainForm : Form
         var items = _infoColumnas.Select(c => c.Display).Distinct().ToArray<object>();
 
         string prevFiltro = cmbCampoBusqueda.Text;
-        cmbCampoBusqueda.Items.Clear();
-        cmbCampoBusqueda.Items.AddRange(items);
-        int idxF = cmbCampoBusqueda.FindStringExact(prevFiltro);
-        cmbCampoBusqueda.SelectedIndex = idxF >= 0 ? idxF : 0;
+        cmbCampoBusqueda.Items.Clear(); cmbCampoBusqueda.Items.AddRange(items);
+        int f = cmbCampoBusqueda.FindStringExact(prevFiltro);
+        cmbCampoBusqueda.SelectedIndex = f >= 0 ? f : 0;
 
         string prevOrden = cmbCampoOrden.Text;
-        cmbCampoOrden.Items.Clear();
-        cmbCampoOrden.Items.AddRange(items);
-        int idxO = cmbCampoOrden.FindStringExact(prevOrden);
-        if (idxO < 0) idxO = _infoColumnas.FindIndex(c => c.Clave == "valor");
-        cmbCampoOrden.SelectedIndex = Math.Max(0, idxO);
+        cmbCampoOrden.Items.Clear(); cmbCampoOrden.Items.AddRange(items);
+        int o = cmbCampoOrden.FindStringExact(prevOrden);
+        if (o < 0) o = _infoColumnas.FindIndex(c => c.Clave == "valor");
+        cmbCampoOrden.SelectedIndex = Math.Max(0, o);
 
         if (cmbLinqCampo != null)
         {
             string prevLinq = cmbLinqCampo.Text;
-            cmbLinqCampo.Items.Clear();
-            cmbLinqCampo.Items.AddRange(items);
-            int idxL = cmbLinqCampo.FindStringExact(prevLinq);
-            cmbLinqCampo.SelectedIndex = Math.Max(0, idxL >= 0 ? idxL : 0);
+            cmbLinqCampo.Items.Clear(); cmbLinqCampo.Items.AddRange(items);
+            int l = cmbLinqCampo.FindStringExact(prevLinq);
+            cmbLinqCampo.SelectedIndex = Math.Max(0, l >= 0 ? l : 0);
         }
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  GRÁFICA  — agrupa por item.Categoria tal como quedó mapeado
+    //  GRÁFICA
     // ══════════════════════════════════════════════════════════════
 
     private void ActualizarChart()
     {
         try
         {
-            var fuente = (_datosBase.Count > 0) ? _datosBase
-                       : (_datos.Count > 0) ? _datos
-                       : null;
-
-            if (fuente == null || fuente.Count == 0)
-            { chartMain.Limpiar(); return; }
+            var fuente = _datosBase.Count > 0 ? _datosBase : _datos.Count > 0 ? _datos : null;
+            if (fuente == null || fuente.Count == 0) { chartMain.Limpiar(); return; }
 
             var agrupado = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in fuente)
@@ -221,11 +191,8 @@ public partial class MainForm : Form
                 agrupado[cat] += item.Valor;
             }
 
-            var data = agrupado
-                .OrderByDescending(kv => kv.Value)
-                .Take(10)
-                .Select(kv => (kv.Key, kv.Value))
-                .ToList();
+            var data = agrupado.OrderByDescending(kv => kv.Value).Take(10)
+                .Select(kv => (kv.Key, kv.Value)).ToList();
 
             if (data.Count == 0) { chartMain.Limpiar(); return; }
 
@@ -235,7 +202,6 @@ public partial class MainForm : Form
                 "Pastel" => TipoGrafica.Pastel,
                 _ => TipoGrafica.Columnas
             };
-
             string titulo = tipo switch
             {
                 TipoGrafica.Columnas => "Valor Total por Categoría – Columnas",
@@ -243,14 +209,10 @@ public partial class MainForm : Form
                 TipoGrafica.Pastel => "Distribución por Categoría – Pastel",
                 _ => ""
             };
-
             chartMain.SetData(data, tipo, titulo);
         }
         catch (Exception ex)
-        {
-            chartMain.Limpiar();
-            ActualizarEstadoBarra($"⚠ Error al renderizar gráfica: {ex.Message}");
-        }
+        { chartMain.Limpiar(); ActualizarEstadoBarra($"⚠ Error gráfica: {ex.Message}"); }
     }
 
     private void BtnActualizarGrafica_Click(object sender, EventArgs e) => ActualizarChart();
@@ -276,8 +238,7 @@ public partial class MainForm : Form
         await CargarArchivoAsync(Path.Combine(_dirDatos, "employees.xml"), "xml", silencioso: true);
         await CargarArchivoAsync(Path.Combine(_dirDatos, "records.txt"), "txt", silencioso: true);
         _ultimoTipoCargado = "";
-        ReconstruirInfoColumnas();
-        RefrescarComboboxes();
+        ReconstruirInfoColumnas(); RefrescarComboboxes();
         ActualizarEstadoBarra($"✅ Todos los archivos cargados. Total: {_datos.Count} registros.");
         MessageBox.Show($"Archivos cargados.\nTotal: {_datos.Count} registros.",
             "Data Fusion Arena", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -331,12 +292,11 @@ public partial class MainForm : Form
         _ultimoTipoCargado = tipo;
         await ActualizarTodoAsync();
         if (!silencioso)
-            ActualizarEstadoBarra(
-                $"✅ {nuevos.Count} registros cargados desde {Path.GetFileName(ruta)}. Total: {_datos.Count}");
+            ActualizarEstadoBarra($"✅ {nuevos.Count} registros cargados desde {Path.GetFileName(ruta)}. Total: {_datos.Count}");
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  CONEXIÓN A BD — ahora con diálogo de selección de columnas
+    //  CONEXIÓN A BD
     // ══════════════════════════════════════════════════════════════
 
     private async void BtnConectarPostgres_Click(object sender, EventArgs e)
@@ -351,19 +311,18 @@ public partial class MainForm : Form
         if (!ok)
         {
             pg.ProbarConexion(out string msgErr);
-            MessageBox.Show($"Error:\n{msgErr}", "PostgreSQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Error:\n{msgErr}", "PostgreSQL",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
             ActualizarEstadoBarra("❌ Error de conexión PostgreSQL.");
             return;
         }
-
         pg.ProbarConexion(out string msg);
 
         // Obtener columnas y mostrar diálogo de selección
-        var colsDisponibles = await Task.Run(() => pg.ObtenerNombresColumnas());
-        using var dlgCols = new FormSeleccionColumnas(colsDisponibles, pg.MapeoColumnas);
+        var cols = await Task.Run(() => pg.ObtenerNombresColumnas());
+        using var dlgCols = new FormSeleccionColumnas(cols, pg.MapeoColumnas);
         if (dlgCols.ShowDialog() != DialogResult.OK) return;
 
-        // Aplicar mapeo elegido por el usuario
         pg.SobreescribirMapeo(dlgCols.ColCategoria, dlgCols.ColValor,
                               dlgCols.ColNombre, dlgCols.ColFecha);
 
@@ -389,15 +348,15 @@ public partial class MainForm : Form
         if (!ok)
         {
             md.ProbarConexion(out string msgErr);
-            MessageBox.Show($"Error:\n{msgErr}", "MariaDB", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Error:\n{msgErr}", "MariaDB",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
             ActualizarEstadoBarra("❌ Error de conexión MariaDB.");
             return;
         }
-
         md.ProbarConexion(out string msg);
 
-        var colsDisponibles = await Task.Run(() => md.ObtenerNombresColumnas());
-        using var dlgCols = new FormSeleccionColumnas(colsDisponibles, md.MapeoColumnas);
+        var cols = await Task.Run(() => md.ObtenerNombresColumnas());
+        using var dlgCols = new FormSeleccionColumnas(cols, md.MapeoColumnas);
         if (dlgCols.ShowDialog() != DialogResult.OK) return;
 
         md.SobreescribirMapeo(dlgCols.ColCategoria, dlgCols.ColValor,
@@ -425,14 +384,12 @@ public partial class MainForm : Form
         if (_lastPgConnector != null)
         {
             ActualizarEstadoBarra("♻ Actualizando PostgreSQL...");
-            var datos = await Task.Run(() => _lastPgConnector.LeerDatos());
-            DataProcessor.AgregarDatos(_datos, datos);
+            DataProcessor.AgregarDatos(_datos, await Task.Run(() => _lastPgConnector.LeerDatos()));
         }
         if (_lastMdConnector != null)
         {
             ActualizarEstadoBarra("♻ Actualizando MariaDB...");
-            var datos = await Task.Run(() => _lastMdConnector.LeerDatos());
-            DataProcessor.AgregarDatos(_datos, datos);
+            DataProcessor.AgregarDatos(_datos, await Task.Run(() => _lastMdConnector.LeerDatos()));
         }
         _ultimoTipoCargado = (_lastPgConnector != null && _lastMdConnector == null) ? "postgresql"
                            : (_lastMdConnector != null && _lastPgConnector == null) ? "mariadb" : "";
@@ -446,9 +403,7 @@ public partial class MainForm : Form
 
     private async void BtnFiltrar_Click(object? sender, EventArgs e)
     {
-        string display = cmbCampoBusqueda.Text;
-        string clave = TraducirClave(display);
-        string valor = txtBusqueda.Text.Trim();
+        string display = cmbCampoBusqueda.Text, clave = TraducirClave(display), valor = txtBusqueda.Text.Trim();
         ActualizarEstadoBarra("🔍 Filtrando...");
         _datosVista = string.IsNullOrEmpty(valor)
             ? new List<DataItem>(_datosBase)
@@ -462,23 +417,21 @@ public partial class MainForm : Form
         txtBusqueda.Text = "";
         _datosVista = new List<DataItem>(_datosBase);
         await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
-        ActualizarEstadoBarra($"Filtro limpiado. {_datosVista.Count} registros visibles.");
+        ActualizarEstadoBarra($"Filtro limpiado. {_datosVista.Count} registros.");
     }
 
     private async void BtnOrdenar_Click(object? sender, EventArgs e)
     {
-        string display = cmbCampoOrden.Text;
-        string clave = TraducirClave(display);
+        string display = cmbCampoOrden.Text, clave = TraducirClave(display);
         bool asc = rbAscendente.Checked;
         ActualizarEstadoBarra("⏳ Ordenando...");
-        var ordenado = await Task.Run(() => DataProcessor.Ordenar(_datosVista, clave, asc));
-        _datosVista = ordenado;
+        _datosVista = await Task.Run(() => DataProcessor.Ordenar(_datosVista, clave, asc));
         await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
-        ActualizarEstadoBarra($"Ordenado por '{display}' {(asc ? "↑" : "↓")}. {ordenado.Count} registros.");
+        ActualizarEstadoBarra($"Ordenado por '{display}' {(asc ? "↑" : "↓")}. {_datosVista.Count} registros.");
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  CATEGORÍAS
+    //  CATEGORÍAS / ESTADÍSTICAS
     // ══════════════════════════════════════════════════════════════
 
     private async void LstCategorias_SelectedIndexChanged(object sender, EventArgs e)
@@ -492,15 +445,11 @@ public partial class MainForm : Form
             $"Total: {lista.Sum(x => x.Valor):N2}";
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  ESTADÍSTICAS
-    // ══════════════════════════════════════════════════════════════
-
     private async Task ActualizarTabEstadisticasAsync()
     {
         if (dgvEstadisticas.Columns.Count == 0)
         {
-            var statCols = new (string H, int W, DataGridViewAutoSizeColumnMode A)[]
+            var sc = new (string H, int W, DataGridViewAutoSizeColumnMode A)[]
             {
                 ("Categoría",0,DataGridViewAutoSizeColumnMode.Fill),
                 ("Cant.",65,DataGridViewAutoSizeColumnMode.None),
@@ -509,10 +458,9 @@ public partial class MainForm : Form
                 ("Mínimo",100,DataGridViewAutoSizeColumnMode.None),
                 ("Total",120,DataGridViewAutoSizeColumnMode.None),
             };
-            foreach (var (h, w, a) in statCols)
+            foreach (var (h, w, a) in sc)
             {
-                var col = new DataGridViewTextBoxColumn
-                { HeaderText = h, ReadOnly = true, AutoSizeMode = a, MinimumWidth = 55 };
+                var col = new DataGridViewTextBoxColumn { HeaderText = h, ReadOnly = true, AutoSizeMode = a, MinimumWidth = 55 };
                 if (a == DataGridViewAutoSizeColumnMode.None) col.Width = w;
                 dgvEstadisticas.Columns.Add(col);
             }
@@ -531,7 +479,7 @@ public partial class MainForm : Form
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  PROCESAMIENTO / DUPLICADOS / LINQ
+    //  PROCESAMIENTO / LINQ
     // ══════════════════════════════════════════════════════════════
 
     private async void BtnDetectarDuplicados_Click(object? sender, EventArgs e)
@@ -539,47 +487,41 @@ public partial class MainForm : Form
         ActualizarEstadoBarra("🔍 Detectando duplicados...");
         var dupes = await Task.Run(() => DataProcessor.DetectarDuplicados(_datos));
         await BindGridAsync(dgvProcesamiento, dupes, null);
-        lblProcInfo.Text = dupes.Count == 0
-            ? "✅ No se encontraron duplicados."
-            : $"⚠ {dupes.Count} duplicados encontrados.";
+        lblProcInfo.Text = dupes.Count == 0 ? "✅ No se encontraron duplicados."
+                                            : $"⚠ {dupes.Count} duplicados encontrados.";
         if (dupes.Count > 0) btnEliminarDuplicados.Enabled = true;
-        ActualizarEstadoBarra($"Duplicados detectados: {dupes.Count}");
+        ActualizarEstadoBarra($"Duplicados: {dupes.Count}");
     }
 
     private async void BtnEliminarDuplicados_Click(object? sender, EventArgs e)
     {
-        if (MessageBox.Show("¿Eliminar duplicados? Esta acción no se puede deshacer.",
-            "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (MessageBox.Show("¿Eliminar duplicados?", "Confirmar",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         int antes = _datos.Count;
         var limpia = await Task.Run(() => DataProcessor.EliminarDuplicados(_datos));
         _datos.Clear(); _datos.AddRange(limpia);
         await ActualizarTodoAsync();
-        lblProcInfo.Text = $"✅ Eliminados {antes - _datos.Count} duplicados. Quedan {_datos.Count}.";
+        lblProcInfo.Text = $"✅ Eliminados {antes - _datos.Count}. Quedan {_datos.Count}.";
         btnEliminarDuplicados.Enabled = false;
-        ActualizarEstadoBarra($"Registros actuales: {_datos.Count}");
     }
 
-    private static string Normalizar(string texto)
+    private static string Normalizar(string t)
     {
-        if (string.IsNullOrEmpty(texto)) return "";
-        var formD = texto.Normalize(System.Text.NormalizationForm.FormD);
-        var sb = new System.Text.StringBuilder(formD.Length);
-        foreach (char c in formD)
+        if (string.IsNullOrEmpty(t)) return "";
+        var fd = t.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder(fd.Length);
+        foreach (char c in fd)
             if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
                 != System.Globalization.UnicodeCategory.NonSpacingMark)
                 sb.Append(char.ToLowerInvariant(c));
         return sb.ToString();
     }
-    private static bool ContieneNorm(string texto, string busqueda)
-        => Normalizar(texto).Contains(Normalizar(busqueda));
+    private static bool ContieneNorm(string t, string b) => Normalizar(t).Contains(Normalizar(b));
 
     private async void BtnLinqWhere_Click(object? sender, EventArgs e)
     {
-        string busqueda = txtLinqFiltro.Text.Trim();
-        string display = cmbLinqCampo?.Text ?? "";
-        string clave = TraducirClave(display);
-        if (string.IsNullOrEmpty(busqueda))
-        { lblProcInfo.Text = "⚠  Escribe un término antes de usar .Where()"; return; }
+        string busqueda = txtLinqFiltro.Text.Trim(), display = cmbLinqCampo?.Text ?? "", clave = TraducirClave(display);
+        if (string.IsNullOrEmpty(busqueda)) { lblProcInfo.Text = "⚠ Escribe un término antes de usar .Where()"; return; }
         var res = await Task.Run(() =>
             _datosBase.Where(d => clave switch
             {
@@ -593,9 +535,8 @@ public partial class MainForm : Form
             }).ToList());
         await BindGridAsync(dgvProcesamiento, res, null);
         lblProcInfo.Text = res.Count > 0
-            ? $"✅ LINQ .Where({display}.Contains(\"{busqueda}\")) → {res.Count} registro(s)"
-            : $"⚠  LINQ .Where({display}.Contains(\"{busqueda}\")) → Sin resultados";
-        ActualizarEstadoBarra($"LINQ .Where(): {res.Count} resultados.");
+            ? $"✅ LINQ .Where() → {res.Count} registro(s)"
+            : "⚠  LINQ .Where() → Sin resultados";
     }
 
     private async void BtnLinqGroupBy_Click(object? sender, EventArgs e)
@@ -612,24 +553,20 @@ public partial class MainForm : Form
                     Fecha = DateTime.Now
                 }).ToList());
         await BindGridAsync(dgvProcesamiento, grupos, null, usarColsDefault: true);
-        lblProcInfo.Text = $"✅ LINQ .GroupBy(Categoría) → {grupos.Count} grupo(s)";
-        ActualizarEstadoBarra($"LINQ .GroupBy(): {grupos.Count} grupos.");
+        lblProcInfo.Text = $"✅ LINQ .GroupBy() → {grupos.Count} grupo(s)";
     }
 
     private async void BtnLinqOrderBy_Click(object? sender, EventArgs e)
     {
         var ordenado = await Task.Run(() => DataProcessor.OrdenarLinq(_datosBase).ToList());
         await BindGridAsync(dgvProcesamiento, ordenado, null);
-        lblProcInfo.Text = $"✅ LINQ .OrderByDescending(Valor).ThenBy(Nombre) → {ordenado.Count} registros";
-        ActualizarEstadoBarra($"LINQ .OrderBy(): {ordenado.Count} registros.");
+        lblProcInfo.Text = $"✅ LINQ .OrderByDescending(Valor) → {ordenado.Count} registros";
     }
 
     private void BtnLinqLimpiar_Click(object? sender, EventArgs e)
     {
-        txtLinqFiltro.Text = ""; dgvProcesamiento.DataSource = null;
-        dgvProcesamiento.Columns.Clear(); lblProcInfo.Text = "Resultados limpiados.";
-        btnEliminarDuplicados.Enabled = false;
-        ActualizarEstadoBarra("Grid de procesamiento limpiado.");
+        txtLinqFiltro.Text = ""; dgvProcesamiento.DataSource = null; dgvProcesamiento.Columns.Clear();
+        lblProcInfo.Text = "Resultados limpiados."; btnEliminarDuplicados.Enabled = false;
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -643,9 +580,7 @@ public partial class MainForm : Form
         ActualizarFuentesCheckedList();
         _datosBase = GetDatosBase();
         _datosVista = new List<DataItem>(_datosBase);
-        ReconstruirInfoColumnas();
-        RefrescarComboboxes();
-        ReconstruirCategorias();
+        ReconstruirInfoColumnas(); RefrescarComboboxes(); ReconstruirCategorias();
         await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
         await ActualizarTabEstadisticasAsync();
         ActualizarChart();
@@ -666,23 +601,21 @@ public partial class MainForm : Form
     {
         if (clbFuentes.Items.Count == 0) return new List<DataItem>(_datos);
         var sel = clbFuentes.CheckedItems.Cast<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (sel.Count == 0) return new List<DataItem>(_datos);
-        return _datos.Where(d => sel.Contains(d.Fuente)).ToList();
+        return sel.Count == 0 ? new List<DataItem>(_datos)
+                              : _datos.Where(d => sel.Contains(d.Fuente)).ToList();
     }
 
     private void ActualizarFuentesCheckedList()
     {
         var prevSel = clbFuentes.CheckedItems.Cast<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
         var prevExist = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (int i = 0; i < clbFuentes.Items.Count; i++)
-            prevExist.Add(clbFuentes.Items[i]?.ToString() ?? "");
+        for (int i = 0; i < clbFuentes.Items.Count; i++) prevExist.Add(clbFuentes.Items[i]?.ToString() ?? "");
         clbFuentes.ItemCheck -= ClbFuentes_ItemCheck!;
         clbFuentes.Items.Clear();
         foreach (var f in _datos.Select(d => d.Fuente).Distinct().OrderBy(f => f))
         {
             bool esNueva = !prevExist.Contains(f);
-            bool marcada = esNueva || prevSel.Count == 0 || prevSel.Contains(f);
-            clbFuentes.Items.Add(f, marcada);
+            clbFuentes.Items.Add(f, esNueva || prevSel.Count == 0 || prevSel.Contains(f));
         }
         clbFuentes.ItemCheck += ClbFuentes_ItemCheck!;
     }
@@ -696,13 +629,13 @@ public partial class MainForm : Form
             await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
             await ActualizarTabEstadisticasAsync();
             ActualizarChart();
-            var activos = clbFuentes.CheckedItems.Cast<string>().ToList();
-            ActualizarEstadoBarra($"Mostrando {_datosVista.Count} registros de: {string.Join(", ", activos)}");
+            ActualizarEstadoBarra($"Mostrando {_datosVista.Count} registros de: " +
+                string.Join(", ", clbFuentes.CheckedItems.Cast<string>()));
         });
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  BIND GRID
+    //  BIND GRID / DATA TABLE
     // ══════════════════════════════════════════════════════════════
 
     private async Task BindGridAsync(DataGridView dgv, List<DataItem> items,
@@ -725,11 +658,11 @@ public partial class MainForm : Form
         Label? contadorLabel, List<(string Display, string Clave)> colInfos)
     {
         dgv.DataSource = null; dgv.Columns.Clear(); dgv.AutoGenerateColumns = false;
-        var claveMap = colInfos.ToDictionary(c => c.Display, c => c.Clave, StringComparer.OrdinalIgnoreCase);
-        string? nombreDisplay = colInfos.FirstOrDefault(c => c.Clave == "nombre").Display;
+        var cm = colInfos.ToDictionary(c => c.Display, c => c.Clave, StringComparer.OrdinalIgnoreCase);
+        string? nd = colInfos.FirstOrDefault(c => c.Clave == "nombre").Display;
         foreach (DataColumn col in dt.Columns)
         {
-            string clave = claveMap.TryGetValue(col.ColumnName, out var cv) ? cv : col.ColumnName.ToLower();
+            string clave = cm.TryGetValue(col.ColumnName, out var cv) ? cv : col.ColumnName.ToLower();
             var dgvCol = new DataGridViewTextBoxColumn
             {
                 Name = col.ColumnName,
@@ -741,12 +674,11 @@ public partial class MainForm : Form
             };
             dgvCol.Width = clave switch
             { "id" => 60, "nombre" => 200, "categoria" => 130, "valor" => 100, "fecha" => 105, "fuente" => 90, _ => 120 };
-            if (!string.IsNullOrEmpty(nombreDisplay) && col.ColumnName == nombreDisplay)
+            if (!string.IsNullOrEmpty(nd) && col.ColumnName == nd)
             { dgvCol.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; dgvCol.MinimumWidth = 150; }
             dgv.Columns.Add(dgvCol);
         }
-        AplicarEstiloGrid(dgv);
-        dgv.DataSource = dt;
+        AplicarEstiloGrid(dgv); dgv.DataSource = dt;
         dgv.CellFormatting -= DgvCellFormatting!;
         dgv.CellFormatting += DgvCellFormatting!;
         if (contadorLabel != null)
@@ -763,10 +695,10 @@ public partial class MainForm : Form
         {
             var bg = dgv.Rows[e.RowIndex].Cells["Fuente"].Value?.ToString() switch
             {
-                "json" => "Color.FromArgb(18,50,18)" is var _ ? Color.FromArgb(18, 50, 18) : Color.Black,
-                _ => Color.FromArgb(32, 32, 48)
+                "json" => "",
+                _ => ""   // placeholder para el switch real abajo
             };
-            bg = dgv.Rows[e.RowIndex].Cells["Fuente"].Value?.ToString() switch
+            var bgColor = dgv.Rows[e.RowIndex].Cells["Fuente"].Value?.ToString() switch
             {
                 "json" => Color.FromArgb(18, 50, 18),
                 "csv" => Color.FromArgb(50, 44, 8),
@@ -776,7 +708,7 @@ public partial class MainForm : Form
                 "mariadb" => Color.FromArgb(54, 24, 8),
                 _ => Color.FromArgb(32, 32, 48)
             };
-            e.CellStyle.BackColor = bg;
+            e.CellStyle.BackColor = bgColor;
             e.CellStyle.ForeColor = Color.FromArgb(230, 230, 240);
             e.CellStyle.SelectionBackColor = Color.FromArgb(0, 100, 180);
             e.CellStyle.SelectionForeColor = Color.White;
@@ -784,8 +716,7 @@ public partial class MainForm : Form
         catch { }
     }
 
-    private static DataTable BuildDataTable(
-        List<DataItem> items, List<(string Display, string Clave)> colInfos)
+    private static DataTable BuildDataTable(List<DataItem> items, List<(string Display, string Clave)> colInfos)
     {
         var dt = new DataTable();
         foreach (var (display, clave) in colInfos)
@@ -808,7 +739,7 @@ public partial class MainForm : Form
                     "valor" => (object)item.Valor,
                     "fecha" => item.Fecha.ToString("yyyy-MM-dd"),
                     "fuente" => item.Fuente,
-                    _ => BuscarEnCamposExtra(item, clave)
+                    _ => BuscarExtra(item, clave)
                 };
             }
             dt.Rows.Add(row);
@@ -817,7 +748,7 @@ public partial class MainForm : Form
         return dt;
     }
 
-    private static string BuscarEnCamposExtra(DataItem item, string clave)
+    private static string BuscarExtra(DataItem item, string clave)
     {
         if (item.CamposExtra.TryGetValue(clave, out var v)) return v;
         foreach (var kv in item.CamposExtra)
@@ -825,12 +756,16 @@ public partial class MainForm : Form
         return "";
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  ESTILOS / CONFIGURACIÓN
+    // ══════════════════════════════════════════════════════════════
+
     private void ConfigurarDataGridViews()
     {
         foreach (var dgv in new[] { dgvTodos, dgvCategoria, dgvProcesamiento })
         { dgv.AutoGenerateColumns = false; AplicarEstiloGrid(dgv); }
         dgvEstadisticas.Columns.Clear();
-        var sc = new (string H, int W, DataGridViewAutoSizeColumnMode A)[]
+        foreach (var (h, w, a) in new (string, int, DataGridViewAutoSizeColumnMode)[]
         {
             ("Categoría",0,DataGridViewAutoSizeColumnMode.Fill),
             ("Cant.",65,DataGridViewAutoSizeColumnMode.None),
@@ -838,8 +773,7 @@ public partial class MainForm : Form
             ("Máximo",100,DataGridViewAutoSizeColumnMode.None),
             ("Mínimo",100,DataGridViewAutoSizeColumnMode.None),
             ("Total",120,DataGridViewAutoSizeColumnMode.None),
-        };
-        foreach (var (h, w, a) in sc)
+        })
         {
             var col = new DataGridViewTextBoxColumn { HeaderText = h, ReadOnly = true, AutoSizeMode = a, MinimumWidth = 55 };
             if (a == DataGridViewAutoSizeColumnMode.None) col.Width = w;
@@ -892,10 +826,8 @@ public partial class MainForm : Form
         dgvEstadisticas.Rows.Clear(); lstCategorias.Items.Clear(); clbFuentes.Items.Clear();
         txtLinqFiltro.Text = ""; lblProcInfo.Text = "Selecciona una operación.";
         btnEliminarDuplicados.Enabled = false; chartMain.Limpiar(); lblContadorTodos.Text = "0 registros";
-        _infoColumnas.Clear();
-        foreach (var col in _colsDefault) _infoColumnas.Add(col);
-        RefrescarComboboxes();
-        ActualizarEstadoBarra("Datos limpiados.");
+        _infoColumnas.Clear(); foreach (var col in _colsDefault) _infoColumnas.Add(col);
+        RefrescarComboboxes(); ActualizarEstadoBarra("Datos limpiados.");
     }
 
     private void MenuAcercaDe_Click(object sender, EventArgs e) =>
@@ -910,7 +842,7 @@ public partial class MainForm : Form
 }
 
 // ══════════════════════════════════════════════════════════════
-//  DIÁLOGO 1: Conexión BD (campos individuales)
+//  DIÁLOGO 1: Conexión BD
 // ══════════════════════════════════════════════════════════════
 
 public class FormConexionBD : Form
@@ -926,8 +858,7 @@ public class FormConexionBD : Form
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false;
         BackColor = Color.FromArgb(30, 30, 45); ForeColor = Color.White;
 
-        bool esPg = motor == "PostgreSQL";
-        string pd = esPg ? "5432" : "3306", ud = esPg ? "postgres" : "root";
+        bool esPg = motor == "PostgreSQL"; string pd = esPg ? "5432" : "3306", ud = esPg ? "postgres" : "root";
         int y = 18, tx = 130, tw = 295;
 
         Label Lbl(string t) => new() { Text = t, AutoSize = true, ForeColor = Color.FromArgb(0, 200, 220) };
@@ -972,10 +903,10 @@ public class FormConexionBD : Form
         ok.Click += (_, _) => {
             string h = string.IsNullOrWhiteSpace(txtHost.Text) ? "localhost" : txtHost.Text.Trim();
             string p = string.IsNullOrWhiteSpace(txtPuerto.Text) ? pd : txtPuerto.Text.Trim();
-            string db = txtBD.Text.Trim(), user = string.IsNullOrWhiteSpace(txtUsuario.Text) ? ud : txtUsuario.Text.Trim();
-            string pass = txtContrasena.Text;
-            CadenaConexion = esPg ? $"Host={h};Port={p};Database={db};Username={user};Password={pass};"
-                               : $"Server={h};Port={p};Database={db};User={user};Password={pass};";
+            string user = string.IsNullOrWhiteSpace(txtUsuario.Text) ? ud : txtUsuario.Text.Trim();
+            CadenaConexion = esPg
+                ? $"Host={h};Port={p};Database={txtBD.Text.Trim()};Username={user};Password={txtContrasena.Text};"
+                : $"Server={h};Port={p};Database={txtBD.Text.Trim()};User={user};Password={txtContrasena.Text};";
             NombreTabla = txtTabla.Text.Trim();
         };
         Controls.AddRange(new Control[] { l1, txtHost, l2, txtPuerto, l3, txtBD, l4, txtUsuario, l5, txtContrasena, l6, txtTabla, ok, can });
@@ -984,9 +915,10 @@ public class FormConexionBD : Form
 }
 
 // ══════════════════════════════════════════════════════════════
-//  DIÁLOGO 2: El usuario elige qué columna es categoría,
-//  cuál es el valor numérico, nombre y fecha.
-//  Esto garantiza que la gráfica siempre tenga sentido.
+//  DIÁLOGO 2: Selección de columnas para mapeo
+//  — Las sugerencias vienen del mapeo automático del conector.
+//  — La columna "Valor" solo lista columnas que parecen numéricas.
+//  — Se puede confirmar con (ninguna) en cualquier campo.
 // ══════════════════════════════════════════════════════════════
 
 public class FormSeleccionColumnas : Form
@@ -998,90 +930,113 @@ public class FormSeleccionColumnas : Form
 
     public FormSeleccionColumnas(List<string> columnas, Dictionary<string, string> mapeoActual)
     {
-        Text = "Mapeo de columnas para análisis"; Size = new Size(460, 300);
+        Text = "Mapeo de columnas para análisis"; Size = new Size(480, 310);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false;
-        BackColor = Color.FromArgb(30, 30, 45); ForeColor = Color.White;
+        BackColor = Color.FromArgb(25, 25, 40); ForeColor = Color.White;
 
-        var opciones = new List<string> { "(ninguna)" }; opciones.AddRange(columnas);
-        var arr = opciones.ToArray<object>();
-
+        // Sugerencias del mapeo automático (pueden estar vacías si no coincidió nada)
         string sC = mapeoActual.FirstOrDefault(kv => kv.Value == "categoria").Key ?? "";
         string sV = mapeoActual.FirstOrDefault(kv => kv.Value == "valor").Key ?? "";
         string sN = mapeoActual.FirstOrDefault(kv => kv.Value == "nombre").Key ?? "";
         string sF = mapeoActual.FirstOrDefault(kv => kv.Value == "fecha").Key ?? "";
 
-        int y = 15, lx = 15, cx = 210, lw = 190, cw = 215;
+        // Lista completa y lista sin la primera opción vacía
+        var todas = new List<string> { "(ninguna)" }; todas.AddRange(columnas);
+        var arr = todas.ToArray<object>();
 
-        Label Lbl(string t, string s) => new()
+        int y = 18, lx = 15, cx = 215, lw = 195, cw = 230;
+
+        // Instrucción en la parte superior
+        var instruccion = new Label
         {
-            Text = s.Length > 0 ? $"{t}  (sugerido: {s})" : t,
+            Text = "Elige qué columna de tu tabla representa cada concepto.\n" +
+                   "Si el auto-mapeo es incorrecto, corrígelo aquí.",
             Location = new Point(lx, y),
-            Size = new Size(lw, 36),
+            Size = new Size(440, 34),
+            ForeColor = Color.FromArgb(160, 200, 220),
+            Font = new Font("Segoe UI", 8.5f)
+        };
+        y += 42;
+
+        Label Lbl(string t, string sugerido) => new()
+        {
+            Text = sugerido.Length > 0 ? $"{t}\n  ↳ auto: {sugerido}" : t,
+            Location = new Point(lx, y),
+            Size = new Size(lw, sugerido.Length > 0 ? 34 : 22),
             ForeColor = Color.FromArgb(0, 200, 220),
             Font = new Font("Segoe UI", 8.5f)
         };
 
-        ComboBox Cmb(string s)
+        ComboBox Cmb(string sugerido)
         {
             var c = new ComboBox
             {
-                Location = new Point(cx, y + 7),
+                Location = new Point(cx, y + 6),
                 Width = cw,
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                BackColor = Color.FromArgb(45, 45, 65),
+                BackColor = Color.FromArgb(40, 40, 60),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat
             };
             c.Items.AddRange(arr);
-            c.SelectedIndex = s.Length > 0 ? Math.Max(0, opciones.IndexOf(s)) : 0;
+            // Seleccionar la sugerencia si existe, si no dejar (ninguna)
+            int idx = sugerido.Length > 0 ? todas.IndexOf(sugerido) : 0;
+            c.SelectedIndex = Math.Max(0, idx);
             return c;
         }
 
-        var lC = Lbl("📊 Categoría (eje X / agrupación):", sC); var cC = Cmb(sC); y += 42;
-        var lV = Lbl("🔢 Valor numérico (eje Y / suma):", sV); var cV = Cmb(sV); y += 42;
-        var lN = Lbl("🏷  Nombre / etiqueta:", sN); var cN = Cmb(sN); y += 42;
+        // ── Categoría ────────────────────────────────────────────
+        var lC = Lbl("📊 Categoría  (eje X / agrupación):", sC); var cC = Cmb(sC); y += 42;
+        // ── Valor ────────────────────────────────────────────────
+        var lV = Lbl("🔢 Valor numérico  (eje Y / suma):", sV); var cV = Cmb(sV); y += 42;
+        // ── Nombre ───────────────────────────────────────────────
+        var lN = Lbl("🏷  Nombre / etiqueta del registro:", sN); var cN = Cmb(sN); y += 42;
+        // ── Fecha ────────────────────────────────────────────────
         var lF = Lbl("📅 Fecha:", sF); var cF = Cmb(sF); y += 50;
 
-        var note = new Label
+        var nota = new Label
         {
-            Text = "ℹ  Deja en (ninguna) si la columna no aplica para tu tabla.",
+            Text = "ℹ  Puedes dejar campos en (ninguna) si no aplican.",
             Location = new Point(lx, y),
-            Size = new Size(420, 18),
-            ForeColor = Color.FromArgb(140, 140, 160),
+            Size = new Size(440, 18),
+            ForeColor = Color.FromArgb(120, 120, 150),
             Font = new Font("Segoe UI", 8f)
-        }; y += 28;
+        };
+        y += 28;
 
-        var ok = new Button
+        var btnOk = new Button
         {
             Text = "✔ Confirmar",
-            Location = new Point(235, y),
-            Width = 100,
+            Location = new Point(248, y),
+            Width = 105,
             DialogResult = DialogResult.OK,
             BackColor = Color.FromArgb(0, 120, 212),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };
-        var can = new Button
+        var btnCan = new Button
         {
             Text = "Cancelar",
-            Location = new Point(345, y),
-            Width = 80,
+            Location = new Point(362, y),
+            Width = 85,
             DialogResult = DialogResult.Cancel,
             BackColor = Color.FromArgb(80, 30, 30),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };
 
-        ok.Click += (_, _) => {
+        btnOk.Click += (_, _) =>
+        {
             ColCategoria = cC.Text == "(ninguna)" ? "" : cC.Text;
             ColValor = cV.Text == "(ninguna)" ? "" : cV.Text;
             ColNombre = cN.Text == "(ninguna)" ? "" : cN.Text;
             ColFecha = cF.Text == "(ninguna)" ? "" : cF.Text;
         };
 
-        ClientSize = new Size(445, y + 50);
-        Controls.AddRange(new Control[] { lC, cC, lV, cV, lN, cN, lF, cF, note, ok, can });
-        AcceptButton = ok; CancelButton = can;
+        ClientSize = new Size(460, y + 50);
+        Controls.AddRange(new Control[]
+        { instruccion, lC, cC, lV, cV, lN, cN, lF, cF, nota, btnOk, btnCan });
+        AcceptButton = btnOk; CancelButton = btnCan;
     }
 }
