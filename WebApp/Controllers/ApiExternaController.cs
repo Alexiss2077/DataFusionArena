@@ -17,10 +17,10 @@ public class ApiExternaController : Controller
     private readonly IHttpClientFactory _http;
     private readonly DataStore          _store;
 
-    // Coordenadas – Monterrey, NL (cercano a Coahuila)
-    private const double Lat  = 25.67;
-    private const double Lon  = -100.31;
-    private const string Ciudad = "Monterrey, México";
+    // Coordenadas – san buena
+    private const double Lat  = 27.0619;
+    private const double Lon  = -101.5489;
+    private const string Ciudad = "San Buenaventura, México";
 
     public ApiExternaController(IHttpClientFactory http, DataStore store)
     {
@@ -66,7 +66,7 @@ public class ApiExternaController : Controller
 
             items.AddRange(precip);
             _store.Agregar(items);
-            TempData["Ok"] = $"✅ {items.Count} registros de clima integrados al DataStore.";
+            TempData["Ok"] = $"✅ {items.Count} registros de clima integrados al DataSet.";
         }
         else
         {

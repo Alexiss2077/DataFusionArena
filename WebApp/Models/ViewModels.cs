@@ -32,7 +32,7 @@ public class GraficasViewModel
 // ── API Externa – Open-Meteo (clima) ───────────────────────────
 public class ClimaViewModel
 {
-    public string       Ciudad      { get; set; } = "Monterrey, México";
+    public string       Ciudad      { get; set; } = "San Buenaventura, México";
     public List<DiaClima> Pronostico { get; set; } = new();
     public bool         ConError    { get; set; }
     public string       MensajeError{ get; set; } = "";
