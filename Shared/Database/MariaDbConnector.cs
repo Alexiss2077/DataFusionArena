@@ -13,11 +13,14 @@ public class MariaDbConnector
     public Dictionary<string, string> MapeoColumnas { get; private set; } =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Flag: el usuario ya eligió el mapeo manualmente → no tocar en LeerDatos
+    private bool _mapeoConfirmadoPorUsuario = false;
+
     public MariaDbConnector() { }
     public MariaDbConnector(string cadenaConexion, string tabla)
     { CadenaConexion = cadenaConexion; Tabla = tabla; }
 
-    // ── Devuelve nombres de columna sin leer filas ───────────────
+    // ── Paso 1: obtener nombres de columna (sin leer filas) ──────
     public List<string> ObtenerNombresColumnas()
     {
         var cols = new List<string>();
@@ -32,29 +35,33 @@ public class MariaDbConnector
         catch (Exception ex)
         { Console.WriteLine($"[MariaDB] ObtenerNombresColumnas: {ex.Message}"); }
 
-        UltimasColumnas = cols;
-        ActualizarMapeoAutomatico();   // sugerencias iniciales
+        UltimasColumnas = new List<string>(cols);
+        // Generar sugerencias automáticas SOLO para el diálogo
+        ActualizarMapeoAutomatico(cols);
+        _mapeoConfirmadoPorUsuario = false;
         return cols;
     }
 
-    // ── El usuario confirma qué columna es cada rol ──────────────
-    // Limpia sólo las 4 claves estándar y aplica la elección.
+    // ── Paso 2: el usuario confirma el mapeo ─────────────────────
     public void SobreescribirMapeo(
         string colCategoria, string colValor,
         string colNombre, string colFecha)
     {
-        var aEliminar = MapeoColumnas
-            .Where(kv => kv.Value is "categoria" or "valor" or "nombre" or "fecha")
-            .Select(kv => kv.Key).ToList();
-        foreach (var k in aEliminar) MapeoColumnas.Remove(k);
+        MapeoColumnas.Clear();
+        // Siempre guardar id si existe
+        var colId = UltimasColumnas.FirstOrDefault(c =>
+            string.Equals(c, "id", StringComparison.OrdinalIgnoreCase));
+        if (colId != null) MapeoColumnas[colId] = "id";
 
         if (!string.IsNullOrEmpty(colCategoria)) MapeoColumnas[colCategoria] = "categoria";
         if (!string.IsNullOrEmpty(colValor)) MapeoColumnas[colValor] = "valor";
         if (!string.IsNullOrEmpty(colNombre)) MapeoColumnas[colNombre] = "nombre";
         if (!string.IsNullOrEmpty(colFecha)) MapeoColumnas[colFecha] = "fecha";
+
+        _mapeoConfirmadoPorUsuario = true; // ← bloquear auto-reset en LeerDatos
     }
 
-    // ── Leer todos los datos ─────────────────────────────────────
+    // ── Paso 3: leer datos usando el mapeo vigente ───────────────
     public List<DataItem> LeerDatos()
     {
         var lista = new List<DataItem>();
@@ -72,52 +79,39 @@ public class MariaDbConnector
             cmd.CommandTimeout = 120;
             using var reader = cmd.ExecuteReader();
 
-            // Índice posición por nombre de columna
             var mapa = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < reader.FieldCount; i++) mapa[reader.GetName(i)] = i;
-
             UltimasColumnas = mapa.Keys.ToList();
 
-            // Si el usuario no sobreescribió el mapeo, hacerlo automáticamente
-            if (!MapeoColumnas.Any(kv => kv.Value == "categoria"))
+            // SOLO aplicar auto-mapeo si el usuario NO confirmó manualmente
+            if (!_mapeoConfirmadoPorUsuario)
                 ActualizarMapeoAutomatico(mapa.Keys);
 
-            // Resolver qué columna física corresponde a cada rol
+            // Leer columna destino para cada rol desde el mapeo vigente
             string? colId = MapeoColumnas.FirstOrDefault(kv => kv.Value == "id").Key;
             string? colNom = MapeoColumnas.FirstOrDefault(kv => kv.Value == "nombre").Key;
             string? colCat = MapeoColumnas.FirstOrDefault(kv => kv.Value == "categoria").Key;
             string? colVal = MapeoColumnas.FirstOrDefault(kv => kv.Value == "valor").Key;
             string? colFec = MapeoColumnas.FirstOrDefault(kv => kv.Value == "fecha").Key;
 
-            // Columnas que van a propiedades estándar (no a CamposExtra)
-            var mapeadasSet = new HashSet<string>(
-                MapeoColumnas.Keys, StringComparer.OrdinalIgnoreCase);
+            var mapeadasSet = new HashSet<string>(MapeoColumnas.Keys, StringComparer.OrdinalIgnoreCase);
 
             int contador = 1;
             while (reader.Read())
             {
                 var item = new DataItem { Fuente = "mariadb" };
 
-                // ── ID ───────────────────────────────────────────
-                if (colId != null && mapa.TryGetValue(colId, out int iId) && !reader.IsDBNull(iId)
-                    && int.TryParse(reader[iId].ToString(), out int idParsed))
-                    item.Id = idParsed;
-                else
-                    item.Id = contador;
+                item.Id = (colId != null && mapa.TryGetValue(colId, out int iId)
+                           && !reader.IsDBNull(iId)
+                           && int.TryParse(reader[iId].ToString(), out int idV))
+                           ? idV : contador;
 
-                // ── Nombre ───────────────────────────────────────
                 item.Nombre = LeerStr(reader, mapa, colNom) ?? $"Registro-{contador}";
-
-                // ── Categoría (puede ser cualquier columna de texto) ──
                 item.Categoria = LeerStr(reader, mapa, colCat) ?? "Sin categoría";
-
-                // ── Valor (columna numérica elegida por el usuario) ───
                 item.Valor = LeerDbl(reader, mapa, colVal) ?? 0;
-
-                // ── Fecha ────────────────────────────────────────
                 item.Fecha = LeerDate(reader, mapa, colFec) ?? DateTime.Now;
 
-                // ── Resto de columnas → CamposExtra ──────────────
+                // Columnas restantes → CamposExtra
                 foreach (var kv in mapa)
                 {
                     if (mapeadasSet.Contains(kv.Key)) continue;
@@ -130,7 +124,8 @@ public class MariaDbConnector
                 if (contador % 10_000 == 0)
                     Console.WriteLine($"[MariaDB]    ... {contador} registros leídos");
             }
-            Console.WriteLine($"[MariaDB] ✓  {lista.Count} registros leídos desde '{Tabla}'");
+            Console.WriteLine($"[MariaDB] ✓  {lista.Count} registros leídos. " +
+                $"Cat={colCat ?? "—"} Val={colVal ?? "—"} Nom={colNom ?? "—"}");
         }
         catch (Exception ex) { Console.WriteLine($"[MariaDB] ✗  Error: {ex.Message}"); }
         return lista;
@@ -150,16 +145,15 @@ public class MariaDbConnector
         catch (Exception ex) { mensaje = $"Error de conexión: {ex.Message}"; return false; }
     }
 
-    // ── Mapeo automático por nombres conocidos ───────────────────
     private void ActualizarMapeoAutomatico(IEnumerable<string>? cols = null)
     {
-        var fuente = cols ?? (IEnumerable<string>)UltimasColumnas;
-        MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var src = (cols ?? UltimasColumnas).ToList();
+        MapeoColumnas.Clear();
 
         string? Find(params string[] alias)
         {
             foreach (var a in alias)
-                foreach (var c in fuente)
+                foreach (var c in src)
                     if (string.Equals(c, a, StringComparison.OrdinalIgnoreCase)) return c;
             return null;
         }
@@ -172,7 +166,6 @@ public class MariaDbConnector
         c = Find("fecha", "date", "fecha_registro", "fecha_reporte", "created_at", "updated_at", "anio", "year"); if (c != null) MapeoColumnas[c] = "fecha";
     }
 
-    // ── Helpers de lectura por nombre de columna ─────────────────
     private static string? LeerStr(MySqlDataReader r, Dictionary<string, int> m, string? col)
     {
         if (col == null || !m.TryGetValue(col, out int i) || r.IsDBNull(i)) return null;
@@ -185,12 +178,12 @@ public class MariaDbConnector
         if (col == null || !m.TryGetValue(col, out int i) || r.IsDBNull(i)) return null;
         return double.TryParse(r[i].ToString(),
             System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : (double?)null;
+            System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : null;
     }
 
     private static DateTime? LeerDate(MySqlDataReader r, Dictionary<string, int> m, string? col)
     {
         if (col == null || !m.TryGetValue(col, out int i) || r.IsDBNull(i)) return null;
-        return DateTime.TryParse(r[i].ToString(), out DateTime d) ? d : (DateTime?)null;
+        return DateTime.TryParse(r[i].ToString(), out DateTime d) ? d : null;
     }
 }
