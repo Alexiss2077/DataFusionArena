@@ -212,7 +212,7 @@ public static class JsonDataReader
                 if (DateTime.TryParse(p.GetString(), out DateTime d)) return d;
         return null;
     }
-
+    ///tggg
     private static string? FallbackPrimeraString(JsonElement el, params string[][] excluidos)
     {
         var exc = new HashSet<string>(excluidos.SelectMany(a => a), StringComparer.OrdinalIgnoreCase);
