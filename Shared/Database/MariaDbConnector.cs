@@ -5,10 +5,8 @@ namespace DataFusionArena.Shared.Database;
 
 public class MariaDbConnector
 {
-    public string CadenaConexion { get; set; } =
-        "Server=localhost;Port=3306;Database=datafusion;User=root;Password=tu_password;";
-
-    public string Tabla { get; set; } = "puntuaciones";
+    public string CadenaConexion { get; set; } = "";
+    public string Tabla { get; set; } = "";
     public int LimiteFilas { get; set; } = 0;
     public List<string> UltimasColumnas { get; private set; } = new();
     public Dictionary<string, string> MapeoColumnas { get; private set; } =
@@ -16,7 +14,7 @@ public class MariaDbConnector
 
     public MariaDbConnector() { }
 
-    public MariaDbConnector(string cadenaConexion, string tabla = "puntuaciones")
+    public MariaDbConnector(string cadenaConexion, string tabla)
     {
         CadenaConexion = cadenaConexion;
         Tabla = tabla;

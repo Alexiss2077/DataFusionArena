@@ -1048,9 +1048,9 @@ public class FormConexionBD : Form
         ForeColor = Color.White;
 
         string cadenaDefault = motor == "PostgreSQL"
-            ? "Host=localhost;Port=5432;Database=datafusion;Username=postgres;Password=TU_PASSWORD;"
-            : "Server=localhost;Port=3306;Database=datafusion;User=root;Password=TU_PASSWORD;";
-        string tablaDefault = motor == "PostgreSQL" ? "videojuegos" : "autos";
+            ? "Host=localhost;Port=5432;Database=;Username=postgres;Password=;"
+            : "Server=localhost;Port=3306;Database=;User=root;Password=;";
+        string tablaDefault = "";
 
         var lblC = new Label { Text = "Cadena de conexión:", Location = new Point(15, 20), AutoSize = true, ForeColor = Color.Cyan };
         txtCadena = new TextBox { Location = new Point(15, 42), Width = 475, Text = cadenaDefault, BackColor = Color.FromArgb(45, 45, 65), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };

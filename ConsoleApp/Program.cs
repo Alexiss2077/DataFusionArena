@@ -7,7 +7,6 @@ namespace DataFusionArena.ConsoleApp;
 
 class Program
 {
-    // ── Estado global de la aplicación ──────────────────────────
     static readonly List<DataItem> _datos = new();
     static Dictionary<string, List<DataItem>> _porCategoria = new();
     static Dictionary<int, DataItem> _porId = new();
@@ -29,10 +28,6 @@ class Program
 
         Console.WriteLine("\n¡Hasta luego! 🎮\n");
     }
-
-    // ══════════════════════════════════════════════════════════════
-    //  BANNER Y MENÚ
-    // ══════════════════════════════════════════════════════════════
 
     static void MostrarBanner()
     {
@@ -93,10 +88,6 @@ class Program
         return true;
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  NIVEL 1 y 2 – Carga de archivos
-    // ══════════════════════════════════════════════════════════════
-
     static void CargarArchivos()
     {
         Titulo("CARGAR ARCHIVOS DE DATOS");
@@ -134,10 +125,6 @@ class Program
         Color(ConsoleColor.Green, $"\n  ✅ Total acumulado: {_datos.Count} registros en memoria.");
     }
 
-    /// <summary>
-    /// Carga un archivo personalizado ingresado por el usuario.
-    /// Limpia comillas y espacios del path (frecuentes al arrastrar archivos).
-    /// </summary>
     static void CargarArchivoPersonalizado()
     {
         Console.WriteLine("  Ingresa la ruta del archivo (puedes arrastrar el archivo aquí):");
@@ -150,7 +137,6 @@ class Program
             return;
         }
 
-        // Limpiar comillas (drag-and-drop en algunos terminales las añade)
         string ruta = input.Trim().Trim('"').Trim('\'').Trim();
 
         if (!File.Exists(ruta))
@@ -205,10 +191,6 @@ class Program
         DataProcessor.AgregarDatos(_datos, nuevos);
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  NIVEL 3 – Bases de datos
-    // ══════════════════════════════════════════════════════════════
-
     static void ConectarBD()
     {
         Titulo("CONEXIÓN A BASES DE DATOS");
@@ -219,23 +201,29 @@ class Program
 
         if (op == "1")
         {
-            Console.Write("\n  Cadena PostgreSQL (ENTER para usar la predeterminada):\n  > ");
+            Console.Write("\n  Cadena de conexión PostgreSQL:\n  > ");
             string? cadena = Console.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(cadena))
+            {
+                Color(ConsoleColor.Yellow, "  Cadena vacía, operación cancelada.");
+                return;
+            }
 
-            Console.Write("  Nombre de tabla (ENTER = videojuegos): ");
+            Console.Write("  Nombre de tabla: ");
             string tabla = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(tabla)) tabla = "videojuegos";
+            if (string.IsNullOrEmpty(tabla))
+            {
+                Color(ConsoleColor.Yellow, "  Tabla vacía, operación cancelada.");
+                return;
+            }
 
-            var pg = string.IsNullOrEmpty(cadena)
-                ? new PostgreSqlConnector()
-                : new PostgreSqlConnector(cadena, tabla);
-            pg.Tabla = tabla;
+            var pg = new PostgreSqlConnector(cadena, tabla);
 
             Console.WriteLine("\n  Probando conexión...");
             if (pg.ProbarConexion(out string msg))
             {
                 Color(ConsoleColor.Green, $"  {msg}");
-                Console.WriteLine("  Cargando datos (sin límite)...");
+                Console.WriteLine("  Cargando datos...");
                 var datos = pg.LeerDatos();
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
@@ -246,23 +234,29 @@ class Program
         }
         else if (op == "2")
         {
-            Console.Write("\n  Cadena MariaDB (ENTER para usar la predeterminada):\n  > ");
+            Console.Write("\n  Cadena de conexión MariaDB:\n  > ");
             string? cadena = Console.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(cadena))
+            {
+                Color(ConsoleColor.Yellow, "  Cadena vacía, operación cancelada.");
+                return;
+            }
 
-            Console.Write("  Nombre de tabla (ENTER = puntuaciones): ");
+            Console.Write("  Nombre de tabla: ");
             string tabla = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(tabla)) tabla = "puntuaciones";
+            if (string.IsNullOrEmpty(tabla))
+            {
+                Color(ConsoleColor.Yellow, "  Tabla vacía, operación cancelada.");
+                return;
+            }
 
-            var md = string.IsNullOrEmpty(cadena)
-                ? new MariaDbConnector()
-                : new MariaDbConnector(cadena, tabla);
-            md.Tabla = tabla;
+            var md = new MariaDbConnector(cadena, tabla);
 
             Console.WriteLine("\n  Probando conexión...");
             if (md.ProbarConexion(out string msg))
             {
                 Color(ConsoleColor.Green, $"  {msg}");
-                Console.WriteLine("  Cargando datos (sin límite)...");
+                Console.WriteLine("  Cargando datos...");
                 var datos = md.LeerDatos();
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
@@ -272,10 +266,6 @@ class Program
                 Color(ConsoleColor.Red, $"  ❌ {msg}");
         }
     }
-
-    // ══════════════════════════════════════════════════════════════
-    //  NIVEL 6 – Visualización: Tabla
-    // ══════════════════════════════════════════════════════════════
 
     static void VerTodos()
     {
@@ -315,10 +305,6 @@ class Program
         Console.ResetColor();
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  NIVEL 5 – Filtrado
-    // ══════════════════════════════════════════════════════════════
-
     static void FiltrarDatos()
     {
         Titulo("FILTRAR DATOS (Sin LINQ)");
@@ -331,10 +317,6 @@ class Program
         Color(ConsoleColor.Cyan, $"\n  Resultados: {resultado.Count} registros\n");
         ImprimirTabla(resultado);
     }
-
-    // ══════════════════════════════════════════════════════════════
-    //  NIVEL 5 – Ordenamiento
-    // ══════════════════════════════════════════════════════════════
 
     static void OrdenarDatos()
     {
@@ -349,10 +331,6 @@ class Program
         Color(ConsoleColor.Cyan, $"\n  Ordenado por '{campo}' {dir}\n");
         ImprimirTabla(ordenados);
     }
-
-    // ══════════════════════════════════════════════════════════════
-    //  NIVEL 4 – Dictionary: agrupar por categoría
-    // ══════════════════════════════════════════════════════════════
 
     static void VerPorCategoria()
     {
@@ -382,10 +360,6 @@ class Program
         }
     }
 
-    // ══════════════════════════════════════════════════════════════
-    //  NIVEL 5 – Estadísticas
-    // ══════════════════════════════════════════════════════════════
-
     static void MostrarEstadisticas()
     {
         Titulo("ESTADÍSTICAS POR CATEGORÍA");
@@ -406,10 +380,6 @@ class Program
         Console.WriteLine($"  {sep}");
         Console.ResetColor();
     }
-
-    // ══════════════════════════════════════════════════════════════
-    //  NIVEL 6 – Gráfica de barras en consola
-    // ══════════════════════════════════════════════════════════════
 
     static void GraficaBarras()
     {
@@ -433,10 +403,6 @@ class Program
         }
         Console.WriteLine();
     }
-
-    // ══════════════════════════════════════════════════════════════
-    //  NIVEL 5 – Duplicados
-    // ══════════════════════════════════════════════════════════════
 
     static void GestionarDuplicados()
     {
@@ -463,10 +429,6 @@ class Program
             Color(ConsoleColor.Green, $"  ✅ Eliminados {antes - _datos.Count} duplicados. Quedan {_datos.Count} registros.");
         }
     }
-
-    // ══════════════════════════════════════════════════════════════
-    //  BONUS – LINQ
-    // ══════════════════════════════════════════════════════════════
 
     static void BonusLinq()
     {
@@ -501,10 +463,6 @@ class Program
             ImprimirTabla(top);
         }
     }
-
-    // ══════════════════════════════════════════════════════════════
-    //  HELPERS
-    // ══════════════════════════════════════════════════════════════
 
     static void ActualizarIndices()
     {

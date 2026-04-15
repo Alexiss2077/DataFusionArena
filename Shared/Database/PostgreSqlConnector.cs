@@ -3,39 +3,23 @@ using DataFusionArena.Shared.Models;
 
 namespace DataFusionArena.Shared.Database;
 
-/// <summary>
-/// Conecta a PostgreSQL y lee datos desde cualquier tabla, mapeándolos a List&lt;DataItem&gt;.
-/// Cadena de conexión: modifica Host, Database, Username y Password según tu entorno.
-/// </summary>
 public class PostgreSqlConnector
 {
-    public string CadenaConexion { get; set; } =
-        "Host=localhost;Port=5432;Database=datafusion;Username=postgres;Password=tu_password;";
-
-    public string Tabla { get; set; } = "videojuegos";
-
-    /// <summary>Límite de filas. 0 = sin límite.</summary>
+    public string CadenaConexion { get; set; } = "";
+    public string Tabla { get; set; } = "";
     public int LimiteFilas { get; set; } = 0;
-
-    /// <summary>Nombres de columna en el orden original de la tabla (se puebla tras LeerDatos).</summary>
     public List<string> UltimasColumnas { get; private set; } = new();
-
-    /// <summary>
-    /// Mapeo columna-BD → propiedad-DataItem ("id","nombre","categoria","valor","fecha").
-    /// Las columnas que no aparecen aquí van a CamposExtra.
-    /// </summary>
     public Dictionary<string, string> MapeoColumnas { get; private set; } =
         new(StringComparer.OrdinalIgnoreCase);
 
     public PostgreSqlConnector() { }
 
-    public PostgreSqlConnector(string cadenaConexion, string tabla = "videojuegos")
+    public PostgreSqlConnector(string cadenaConexion, string tabla)
     {
         CadenaConexion = cadenaConexion;
         Tabla = tabla;
     }
 
-    /// <summary>Lee todos los registros de la tabla configurada (sin límite por defecto).</summary>
     public List<DataItem> LeerDatos()
     {
         var lista = new List<DataItem>();
@@ -53,7 +37,6 @@ public class PostgreSqlConnector
                 return lista;
             }
 
-            // Sin LIMIT a menos que LimiteFilas > 0
             string sql = LimiteFilas > 0
                 ? $"SELECT * FROM {Tabla} LIMIT {LimiteFilas}"
                 : $"SELECT * FROM {Tabla}";
@@ -66,17 +49,31 @@ public class PostgreSqlConnector
             for (int i = 0; i < reader.FieldCount; i++)
                 mapa[reader.GetName(i)] = i;
 
-            // ── Exponer metadatos de columnas para la UI ──────────────────
             UltimasColumnas = Enumerable.Range(0, reader.FieldCount)
                 .Select(i => reader.GetName(i)).ToList();
             MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             {
                 string? _c;
-                _c = PrimeraColumna(mapa, "id"); if (_c != null) MapeoColumnas[_c] = "id";
-                _c = PrimeraColumna(mapa, "nombre", "name", "titulo"); if (_c != null) MapeoColumnas[_c] = "nombre";
-                _c = PrimeraColumna(mapa, "categoria", "category", "genero"); if (_c != null) MapeoColumnas[_c] = "categoria";
-                _c = PrimeraColumna(mapa, "valor", "value", "precio"); if (_c != null) MapeoColumnas[_c] = "valor";
-                _c = PrimeraColumna(mapa, "fecha", "date", "fecha_lanzamiento"); if (_c != null) MapeoColumnas[_c] = "fecha";
+                _c = PrimeraColumna(mapa, "id");
+                if (_c != null) MapeoColumnas[_c] = "id";
+
+                _c = PrimeraColumna(mapa, "nombre", "name", "titulo", "title", "producto",
+                    "pais", "country", "jugador", "player", "descripcion", "description", "empleado", "employee");
+                if (_c != null) MapeoColumnas[_c] = "nombre";
+
+                _c = PrimeraColumna(mapa, "categoria", "category", "genero", "genre",
+                    "region", "tipo", "type", "grupo", "group", "departamento", "department",
+                    "nivel", "level", "clase", "class");
+                if (_c != null) MapeoColumnas[_c] = "categoria";
+
+                _c = PrimeraColumna(mapa, "valor", "value", "precio", "price", "ventas_global",
+                    "ventas", "sales", "puntaje", "score", "puntos", "points", "monto", "amount",
+                    "total", "suma", "salario", "salary", "rating", "calificacion");
+                if (_c != null) MapeoColumnas[_c] = "valor";
+
+                _c = PrimeraColumna(mapa, "fecha", "date", "fecha_lanzamiento", "anio", "year",
+                    "fecha_registro", "fecha_reporte", "created_at", "updated_at", "timestamp");
+                if (_c != null) MapeoColumnas[_c] = "fecha";
             }
 
             int contador = 1;
@@ -85,18 +82,26 @@ public class PostgreSqlConnector
                 var item = new DataItem { Fuente = "postgresql" };
 
                 item.Id = LeerInt(reader, mapa, "id") ?? contador;
-                item.Nombre = LeerStr(reader, mapa, "nombre", "name", "titulo") ?? FallbackStr(reader, mapa, "id") ?? $"Registro-{contador}";
-                item.Categoria = LeerStr(reader, mapa, "categoria", "category", "genero") ?? FallbackStr(reader, mapa, "id", "nombre", "name", "titulo", "valor", "value", "precio", "fecha", "date") ?? "Sin categoría";
-                item.Valor = LeerDbl(reader, mapa, "valor", "value", "precio") ?? 0;
-                item.Fecha = LeerDate(reader, mapa, "fecha", "date", "fecha_lanzamiento") ?? DateTime.Now;
+                item.Nombre = LeerStr(reader, mapa, "nombre", "name", "titulo", "title", "producto",
+                    "pais", "country", "jugador", "player", "empleado", "employee") ??
+                    FallbackStr(reader, mapa, "id") ?? $"Registro-{contador}";
+                item.Categoria = LeerStr(reader, mapa, "categoria", "category", "genero", "genre",
+                    "region", "tipo", "type", "grupo", "group", "departamento", "department") ??
+                    FallbackStr(reader, mapa, "id", "nombre", "name", "titulo", "title", "producto",
+                        "pais", "country", "jugador", "player", "empleado", "employee",
+                        "valor", "value", "precio", "price", "ventas_global", "ventas", "sales",
+                        "puntaje", "score", "puntos", "fecha", "date", "fecha_lanzamiento", "anio") ?? "Sin categoría";
+                item.Valor = LeerDbl(reader, mapa, "valor", "value", "precio", "price", "ventas_global",
+                    "ventas", "sales", "puntaje", "score", "puntos", "points", "monto", "amount",
+                    "total", "suma", "salario", "salary", "rating", "calificacion") ?? 0;
+                item.Fecha = LeerDate(reader, mapa, "fecha", "date", "fecha_lanzamiento", "anio",
+                    "fecha_registro", "fecha_reporte", "created_at", "updated_at", "timestamp") ?? DateTime.Now;
 
+                var mapeadasSet = new HashSet<string>(MapeoColumnas.Keys, StringComparer.OrdinalIgnoreCase);
                 foreach (var kv in mapa)
                 {
-                    string c = kv.Key.ToLower();
-                    if (c is "id" or "nombre" or "name" or "titulo"
-                          or "categoria" or "category" or "genero"
-                          or "valor" or "value" or "precio"
-                          or "fecha" or "date" or "fecha_lanzamiento") continue;
+                    if (mapeadasSet.Contains(kv.Key)) continue;
+                    if (string.Equals(kv.Key, "id", StringComparison.OrdinalIgnoreCase)) continue;
                     if (!reader.IsDBNull(kv.Value))
                         item.CamposExtra[kv.Key] = reader[kv.Value].ToString() ?? "";
                 }
@@ -136,7 +141,6 @@ public class PostgreSqlConnector
         }
     }
 
-    // ──────────────────────────────────────────────────────────────
     private List<string> ObtenerColumnas(NpgsqlConnection conn, string tabla)
     {
         var cols = new List<string>();
@@ -189,7 +193,6 @@ public class PostgreSqlConnector
         return null;
     }
 
-    /// <summary>Devuelve el primer alias que exista en el mapa de columnas, o null si ninguno.</summary>
     private static string? PrimeraColumna(Dictionary<string, int> mapa, params string[] alias)
     {
         foreach (var a in alias)
