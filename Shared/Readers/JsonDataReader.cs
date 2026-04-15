@@ -59,7 +59,19 @@ public static class JsonDataReader
                     foreach (var prop in el.EnumerateObject())
                     {
                         if (usadas.Contains(prop.Name)) continue;
-                        item.CamposExtra[prop.Name] = prop.Value.ToString();
+
+                        if (prop.Value.ValueKind == JsonValueKind.Array)
+                        {
+                            var arr = prop.Value.EnumerateArray()
+                                .Select(e => e.GetString() ?? e.ToString())
+                                .Where(s => !string.IsNullOrWhiteSpace(s))
+                                .ToList();
+                            item.CamposExtra[prop.Name] = string.Join(", ", arr);
+                        }
+                        else
+                        {
+                            item.CamposExtra[prop.Name] = prop.Value.ToString();
+                        }
                     }
 
                     lista.Add(item);

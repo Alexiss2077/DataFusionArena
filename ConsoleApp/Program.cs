@@ -132,7 +132,7 @@ class Program
         "nombre" => item.Nombre,
         "categoria" => item.Categoria,
         "valor" => item.Valor.ToString("F2"),
-        "fecha" => item.Fecha.ToString("yyyy-MM-dd"),
+        "fecha" => item.Fecha == new DateTime(item.Fecha.Year, 1, 1) ? item.Fecha.Year.ToString() : item.Fecha.ToString("yyyy-MM-dd"),
         "fuente" => item.Fuente,
         _ => BuscarExtra(item, clave)
     };

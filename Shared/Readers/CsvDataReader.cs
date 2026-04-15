@@ -8,6 +8,10 @@ namespace DataFusionArena.Shared.Readers;
 /// Detecta automáticamente el orden de columnas por encabezado.
 /// Expone <see cref="UltimasColumnas"/> y <see cref="MapeoColumnas"/> para que la UI
 /// pueda mostrar las columnas en el orden original del archivo.
+/// 
+/// ⚠️ CORRECCIÓN: Los aliases "model_year", "año", "anio", "year" NO se incluyen en 
+/// BuscarColumnaEstricta() para la fecha, ya que estos campos son numéricos (años)
+/// y no deben confundirse con campos de fecha reales como "fecha_lanzamiento".
 /// </summary>
 public static class CsvDataReader
 {
@@ -75,13 +79,11 @@ public static class CsvDataReader
             int idxValor = BuscarColumna(mapa, "valor", "value", "precio", "price", "monto",
                                           "amount", "ventas", "score", "puntos", "points",
                                           "salario", "salary", "total", "price");
-            
-            int idxFecha = BuscarColumnaEstricta(mapa,
-                "fecha", "date", "fecha_lanzamiento", "releasedate",
-                "fecha_registro", "created_at", "updated_at", "timestamp",
-                "model_year", "año", "anio", "year");
 
-            // ── Fallback posicional si no se encontraron columnas ────────
+            int idxFecha = BuscarColumnaExacta(mapa,
+                "fecha", "date", "fecha_lanzamiento", "releasedate",
+                "fecha_registro", "created_at", "updated_at", "timestamp", "anio", "model_year");
+
             var mapeadas = new HashSet<int>(
                 new[] { idxId, idxNombre, idxCat, idxValor, idxFecha }.Where(x => x >= 0));
 
@@ -89,7 +91,6 @@ public static class CsvDataReader
             if (idxNombre < 0) idxNombre = SiguienteLibre(mapeadas, encabezados.Length, 0);
             if (idxCat < 0) idxCat = SiguienteLibre(mapeadas, encabezados.Length, 0);
             if (idxValor < 0) idxValor = SiguienteLibre(mapeadas, encabezados.Length, 0);
-            if (idxFecha < 0) idxFecha = SiguienteLibre(mapeadas, encabezados.Length, 0);
 
             Console.WriteLine($"[CSV] Columnas → ID:{idxId} Nombre:{idxNombre} Cat:{idxCat} Valor:{idxValor} Fecha:{idxFecha}");
 
@@ -114,7 +115,7 @@ public static class CsvDataReader
                     item.Nombre = idxNombre >= 0 ? Limpiar(cols, idxNombre) : $"Fila-{fila}";
                     item.Categoria = idxCat >= 0 ? Limpiar(cols, idxCat) : "Sin categoría";
                     item.Valor = idxValor >= 0 ? ParseDouble(cols, idxValor) : 0;
-                    item.Fecha = idxFecha >= 0 ? ParseFecha(cols, idxFecha) : DateTime.Now;
+                    item.Fecha = idxFecha >= 0 ? ParseFechaEspecial(cols, idxFecha, encabezados[idxFecha]) : DateTime.Now;
 
                     // Columnas desconocidas → CamposExtra (clave en lowercase)
                     var usadas = new HashSet<int> { idxId, idxNombre, idxCat, idxValor, idxFecha };
@@ -187,15 +188,29 @@ public static class CsvDataReader
     private static DateTime ParseFecha(string[] cols, int idx)
         => idx >= 0 && idx < cols.Length && DateTime.TryParse(cols[idx].Trim(), out DateTime d) ? d : DateTime.Now;
 
-    /// <summary>
-    /// Igual que BuscarColumna pero NO hace fallback posicional.
-    /// Solo devuelve un índice si el nombre de columna coincide exactamente
-    /// con uno de los alias. Esto evita que columnas numéricas con valores
-    /// </summary>
-    private static int BuscarColumnaEstricta(Dictionary<string, int> mapa, params string[] alias)
+    private static DateTime ParseFechaEspecial(string[] cols, int idx, string nombreColumna)
+    {
+        if (idx < 0 || idx >= cols.Length) return DateTime.Now;
+
+        string valor = cols[idx].Trim();
+        string colLower = nombreColumna.ToLower();
+
+        if (colLower is "anio" or "año" or "year" or "model_year")
+        {
+            if (int.TryParse(valor, out int anio))
+                return new DateTime(anio, 1, 1);
+        }
+
+        if (DateTime.TryParse(valor, out DateTime d))
+            return d;
+
+        return DateTime.Now;
+    }
+
+    private static int BuscarColumnaExacta(Dictionary<string, int> mapa, params string[] alias)
     {
         foreach (var a in alias)
             if (mapa.TryGetValue(a, out int idx)) return idx;
-        return -1;  // -1 = no encontrado, NO hacer fallback
+        return -1;
     }
 }
