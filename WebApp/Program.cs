@@ -1,7 +1,7 @@
 using DataFusionArena.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-
+builder.WebHost.UseUrls("http://*:5000"); //extrerna conexion
 builder.Services.AddControllersWithViews();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<DataStore>();
