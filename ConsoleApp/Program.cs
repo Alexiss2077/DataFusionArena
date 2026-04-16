@@ -13,24 +13,51 @@ class Program
 
     static List<(string Display, string Clave, int Ancho)> _columnas = ObtenerColumnasDefault();
 
-    // ── Columnas del último conector de BD (mariadb / postgresql) ──
     static List<string> _ultimasColumnasBD = new();
     static Dictionary<string, string> _ultimoMapeoBD = new();
     static string _ultimaFuenteBD = "";
 
     static readonly string _dirDatos = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SampleData");
 
+    // ── Detección de moneda y numéricos ──────────────────────────
+    static readonly string[] _kwMoneda = {
+        "price", "precio", "monto", "costo", "cost", "revenue",
+        "salary", "salario", "ventas", "sales", "importe", "amount",
+        "fee", "wage", "income", "ingreso", "earning", "pago", "payment", "ganancia"
+    };
+    static readonly Dictionary<string, bool> _numericCache = new(StringComparer.OrdinalIgnoreCase);
+
+    static bool EsMoneda(string display) =>
+        _kwMoneda.Any(k => display.ToLower().Contains(k));
+
+    static bool EsColumnaNumericaExtra(string clave)
+    {
+        if (clave is "id" or "valor") return true;
+        if (clave is "nombre" or "categoria" or "fecha" or "fuente") return false;
+        if (_numericCache.TryGetValue(clave, out bool cached)) return cached;
+        var muestra = _datos.Count > 20 ? _datos.Take(20).ToList() : _datos;
+        int num = 0, total = 0;
+        foreach (var item in muestra)
+        {
+            string v = BuscarExtra(item, clave);
+            if (string.IsNullOrEmpty(v)) continue;
+            total++;
+            if (double.TryParse(v, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out _)) num++;
+        }
+        bool result = total > 0 && num >= total * 0.75;
+        _numericCache[clave] = result;
+        return result;
+    }
+
     static void Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.Title = "Data Fusion Arena – Consola";
-
         MostrarBanner();
-
         bool continuar = true;
         while (continuar)
             continuar = MostrarMenu();
-
         Console.WriteLine("\n¡Hasta luego! 🎮\n");
     }
 
@@ -50,6 +77,7 @@ class Program
     static void ReconstruirColumnas()
     {
         _columnas = new List<(string Display, string Clave, int Ancho)>();
+        _numericCache.Clear();
 
         var todasExtras = _datos
             .SelectMany(d => d.CamposExtra.Keys)
@@ -82,7 +110,6 @@ class Program
             readerCols = TxtDataReader.UltimasColumnas;
             readerMapeo = TxtDataReader.MapeoColumnas;
         }
-        // ── Bases de datos: usar columnas exactas del conector ───────
         else if ((ultimaFuente == "mariadb" || ultimaFuente == "postgresql")
                  && _ultimasColumnasBD.Count > 0)
         {
@@ -103,8 +130,7 @@ class Program
             }
             if (!yaAgregadas.Contains("fuente"))
                 _columnas.Add(("Fuente", "fuente", 12));
-            foreach (var k in todasExtras.Where(k => !yaAgregadas.Contains(k.ToLowerInvariant())))
-                _columnas.Add((k, k.ToLowerInvariant(), Math.Clamp(k.Length + 2, 8, 25)));
+            // Solo columnas del lector/conector actual — no extras de otras fuentes
         }
         else
         {
@@ -134,7 +160,7 @@ class Program
             int maxLen = display.Length;
             foreach (var item in muestra)
             {
-                int len = ObtenerValorCelda(item, clave).Length;
+                int len = ObtenerValorCelda(item, clave, display).Length;
                 if (len > maxLen) maxLen = len;
             }
             _columnas[c] = (display, clave, Math.Clamp(maxLen, Math.Max(display.Length, 4), 35));
@@ -152,18 +178,32 @@ class Program
         _ => Math.Max(12, display.Length)
     };
 
-    static string ObtenerValorCelda(DataItem item, string clave) => clave switch
+    static string ObtenerValorCelda(DataItem item, string clave, string display = "")
     {
-        "id" => item.Id.ToString(),
-        "nombre" => item.Nombre,
-        "categoria" => item.Categoria,
-        "valor" => item.Valor.ToString("F2"),
-        "fecha" => item.Fecha == new DateTime(item.Fecha.Year, 1, 1)
-                           ? item.Fecha.Year.ToString()
-                           : item.Fecha.ToString("yyyy-MM-dd"),
-        "fuente" => item.Fuente,
-        _ => BuscarExtra(item, clave)
-    };
+        string disp = string.IsNullOrEmpty(display) ? clave : display;
+        switch (clave)
+        {
+            case "id": return item.Id.ToString();
+            case "nombre": return item.Nombre;
+            case "categoria": return item.Categoria;
+            case "valor":
+                return EsMoneda(disp)
+                    ? "$" + item.Valor.ToString("N2")
+                    : item.Valor.ToString("F2");
+            case "fecha":
+                return item.Fecha == new DateTime(item.Fecha.Year, 1, 1)
+                    ? item.Fecha.Year.ToString()
+                    : item.Fecha.ToString("yyyy-MM-dd");
+            case "fuente": return item.Fuente;
+            default:
+                string raw = BuscarExtra(item, clave);
+                if (!string.IsNullOrEmpty(raw) && EsMoneda(disp) && EsColumnaNumericaExtra(clave)
+                    && double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double v))
+                    return "$" + v.ToString("N2");
+                return raw;
+        }
+    }
 
     static string BuscarExtra(DataItem item, string clave)
     {
@@ -239,7 +279,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  NIVEL 1 y 2 – Carga de archivos
+    //  CARGA DE ARCHIVOS
     // ══════════════════════════════════════════════════════════════
 
     static void CargarArchivos()
@@ -327,7 +367,7 @@ class Program
         DataProcessor.AgregarDatos(_datos, TxtDataReader.Leer(ruta));
 
     // ══════════════════════════════════════════════════════════════
-    //  NIVEL 3 – Bases de datos  (campos individuales)
+    //  BASES DE DATOS
     // ══════════════════════════════════════════════════════════════
 
     static void ConectarBD()
@@ -342,40 +382,29 @@ class Program
         {
             Console.Write("\n  Host   (default: localhost): ");
             string host = Console.ReadLine()?.Trim() is { Length: > 0 } h ? h : "localhost";
-
             Console.Write("  Puerto (default: 5432):      ");
             string port = Console.ReadLine()?.Trim() is { Length: > 0 } p ? p : "5432";
-
             Console.Write("  Base de datos:               ");
             string db = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(db))
-            { Color(ConsoleColor.Yellow, "  Base de datos vacía, cancelado."); return; }
-
+            if (string.IsNullOrEmpty(db)) { Color(ConsoleColor.Yellow, "  Base de datos vacía, cancelado."); return; }
             Console.Write("  Usuario (default: postgres):  ");
             string user = Console.ReadLine()?.Trim() is { Length: > 0 } u ? u : "postgres";
-
             Console.Write("  Contraseña:                  ");
             string pass = LeerContraseña();
-
             Console.Write("  Nombre de tabla:             ");
             string tabla = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(tabla))
-            { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
+            if (string.IsNullOrEmpty(tabla)) { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
 
             string cadena = $"Host={host};Port={port};Database={db};Username={user};Password={pass};";
-
             var pg = new PostgreSqlConnector(cadena, tabla);
             Console.WriteLine("\n  Probando conexión...");
             if (pg.ProbarConexion(out string msg))
             {
                 Color(ConsoleColor.Green, $"  {msg}");
                 var datos = pg.LeerDatos();
-
-                // Guardar columnas exactas del conector antes de agregar datos
                 _ultimasColumnasBD = pg.UltimasColumnas;
                 _ultimoMapeoBD = pg.MapeoColumnas;
                 _ultimaFuenteBD = "postgresql";
-
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
                 ReconstruirColumnas();
@@ -387,40 +416,29 @@ class Program
         {
             Console.Write("\n  Host   (default: localhost): ");
             string host = Console.ReadLine()?.Trim() is { Length: > 0 } h ? h : "localhost";
-
             Console.Write("  Puerto (default: 3306):      ");
             string port = Console.ReadLine()?.Trim() is { Length: > 0 } p ? p : "3306";
-
             Console.Write("  Base de datos:               ");
             string db = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(db))
-            { Color(ConsoleColor.Yellow, "  Base de datos vacía, cancelado."); return; }
-
+            if (string.IsNullOrEmpty(db)) { Color(ConsoleColor.Yellow, "  Base de datos vacía, cancelado."); return; }
             Console.Write("  Usuario (default: root):     ");
             string user = Console.ReadLine()?.Trim() is { Length: > 0 } u ? u : "root";
-
             Console.Write("  Contraseña:                  ");
             string pass = LeerContraseña();
-
             Console.Write("  Nombre de tabla:             ");
             string tabla = Console.ReadLine()?.Trim() ?? "";
-            if (string.IsNullOrEmpty(tabla))
-            { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
+            if (string.IsNullOrEmpty(tabla)) { Color(ConsoleColor.Yellow, "  Tabla vacía, cancelado."); return; }
 
             string cadena = $"Server={host};Port={port};Database={db};User={user};Password={pass};";
-
             var md = new MariaDbConnector(cadena, tabla);
             Console.WriteLine("\n  Probando conexión...");
             if (md.ProbarConexion(out string msg))
             {
                 Color(ConsoleColor.Green, $"  {msg}");
                 var datos = md.LeerDatos();
-
-                // Guardar columnas exactas del conector antes de agregar datos
                 _ultimasColumnasBD = md.UltimasColumnas;
                 _ultimoMapeoBD = md.MapeoColumnas;
                 _ultimaFuenteBD = "mariadb";
-
                 DataProcessor.AgregarDatos(_datos, datos);
                 ActualizarIndices();
                 ReconstruirColumnas();
@@ -431,7 +449,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  NIVEL 6 – Tabla DINÁMICA
+    //  TABLA DINÁMICA
     // ══════════════════════════════════════════════════════════════
 
     static void VerTodos()
@@ -447,16 +465,28 @@ class Program
     {
         if (lista.Count == 0) { Color(ConsoleColor.Yellow, "  Sin registros."); return; }
 
+        // Pre-computar columnas numéricas y de moneda
+        var numericClaves = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var currencyDisplays = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (disp, clave, _) in _columnas)
+        {
+            bool esNum = EsColumnaNumericaExtra(clave);
+            if (esNum) numericClaves.Add(clave);
+            if (EsMoneda(disp) && esNum) currencyDisplays.Add(disp);
+        }
+
         int anchoTotal = _columnas.Sum(c => c.Ancho) + (_columnas.Count - 1) * 3 + 2;
         string sep = new string('─', anchoTotal);
 
+        // Encabezado
         Console.ForegroundColor = ConsoleColor.DarkCyan;
         Console.Write("  ");
         for (int c = 0; c < _columnas.Count; c++)
         {
             var (display, clave, ancho) = _columnas[c];
             string hdr = display.Length > ancho ? display[..ancho] : display;
-            string celda = clave is "valor" or "id" ? hdr.PadLeft(ancho) : hdr.PadRight(ancho);
+            bool esNum = clave is "valor" or "id" || numericClaves.Contains(clave);
+            string celda = esNum ? hdr.PadLeft(ancho) : hdr.PadRight(ancho);
             Console.Write(celda);
             if (c < _columnas.Count - 1) Console.Write(" │ ");
         }
@@ -476,9 +506,11 @@ class Program
             Console.Write("  ");
             for (int c = 0; c < _columnas.Count; c++)
             {
-                var (_, clave, ancho) = _columnas[c];
-                string val = ObtenerValorCelda(item, clave);
+                var (display, clave, ancho) = _columnas[c];
+                string val = ObtenerValorCelda(item, clave, display);
                 if (val.Length > ancho) val = val[..(ancho - 1)] + "…";
+
+                bool esNum = clave is "valor" or "id" || numericClaves.Contains(clave);
 
                 if (clave == "fuente")
                 {
@@ -486,8 +518,17 @@ class Program
                     Console.Write(val.PadRight(ancho));
                     Console.ResetColor();
                 }
-                else if (clave is "valor" or "id")
-                    Console.Write(val.PadLeft(ancho));
+                else if (esNum)
+                {
+                    if (currencyDisplays.Contains(display))
+                    {
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.Write(val.PadLeft(ancho));
+                        Console.ResetColor();
+                    }
+                    else
+                        Console.Write(val.PadLeft(ancho));
+                }
                 else
                     Console.Write(val.PadRight(ancho));
 
@@ -503,7 +544,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  NIVEL 5 – Filtrado y Ordenamiento (campos dinámicos)
+    //  FILTRAR Y ORDENAR
     // ══════════════════════════════════════════════════════════════
 
     static void FiltrarDatos()
@@ -543,7 +584,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  NIVEL 4 – Dictionary por categoría
+    //  DICTIONARY POR CATEGORÍA
     // ══════════════════════════════════════════════════════════════
 
     static void VerPorCategoria()
@@ -554,15 +595,15 @@ class Program
         Console.WriteLine("  Categorías disponibles:\n");
         int i = 1;
         var cats = _porCategoria.Keys.ToList();
-        foreach (var c in cats)
-            Console.WriteLine($"  [{i++,2}] {c,-25} → {_porCategoria[c].Count} registros");
+        foreach (var cat in cats)
+            Console.WriteLine($"  [{i++,2}] {cat,-25} → {_porCategoria[cat].Count} registros");
 
         Console.Write("\n  Selecciona número (0 = ver todas): ");
         if (int.TryParse(Console.ReadLine()?.Trim(), out int sel) && sel > 0 && sel <= cats.Count)
         {
-            string cat = cats[sel - 1];
-            Color(ConsoleColor.Cyan, $"\n  Categoría: {cat}\n");
-            ImprimirTabla(_porCategoria[cat]);
+            string cat2 = cats[sel - 1];
+            Color(ConsoleColor.Cyan, $"\n  Categoría: {cat2}\n");
+            ImprimirTabla(_porCategoria[cat2]);
         }
         else
         {
@@ -575,7 +616,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  NIVEL 5 – Estadísticas y Gráficas
+    //  ESTADÍSTICAS Y GRÁFICAS
     // ══════════════════════════════════════════════════════════════
 
     static void MostrarEstadisticas()
@@ -621,7 +662,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  NIVEL 5 – Duplicados
+    //  DUPLICADOS
     // ══════════════════════════════════════════════════════════════
 
     static void GestionarDuplicados()
@@ -693,9 +734,9 @@ class Program
     {
         _porCategoria = DataProcessor.AgruparPorCategoria(_datos);
         _porId = DataProcessor.IndexarPorId(_datos);
+        _numericCache.Clear();
     }
 
-    /// <summary>Lee la contraseña ocultando los caracteres con asteriscos.</summary>
     static string LeerContraseña()
     {
         var sb = new System.Text.StringBuilder();
@@ -703,15 +744,9 @@ class Program
         while ((key = Console.ReadKey(intercept: true)).Key != ConsoleKey.Enter)
         {
             if (key.Key == ConsoleKey.Backspace && sb.Length > 0)
-            {
-                sb.Remove(sb.Length - 1, 1);
-                Console.Write("\b \b");
-            }
+            { sb.Remove(sb.Length - 1, 1); Console.Write("\b \b"); }
             else if (key.Key != ConsoleKey.Backspace)
-            {
-                sb.Append(key.KeyChar);
-                Console.Write('*');
-            }
+            { sb.Append(key.KeyChar); Console.Write('*'); }
         }
         Console.WriteLine();
         return sb.ToString();
