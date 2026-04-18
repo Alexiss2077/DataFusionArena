@@ -19,45 +19,17 @@ class Program
 
     static readonly string _dirDatos = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SampleData");
 
-    // ── Detección de moneda y numéricos ──────────────────────────
-    static readonly string[] _kwMoneda = {
-        "price", "precio", "monto", "costo", "cost", "revenue",
-        "salary", "salario", "ventas", "sales", "importe", "amount",
-        "fee", "wage", "income", "ingreso", "earning", "pago", "payment", "ganancia"
-    };
-    static readonly Dictionary<string, bool> _numericCache = new(StringComparer.OrdinalIgnoreCase);
-
-    static bool EsMoneda(string display) =>
-        _kwMoneda.Any(k => display.ToLower().Contains(k));
-
-    static bool EsColumnaNumericaExtra(string clave)
-    {
-        if (clave is "id" or "valor") return true;
-        if (clave is "nombre" or "categoria" or "fecha" or "fuente") return false;
-        if (_numericCache.TryGetValue(clave, out bool cached)) return cached;
-        var muestra = _datos.Count > 20 ? _datos.Take(20).ToList() : _datos;
-        int num = 0, total = 0;
-        foreach (var item in muestra)
-        {
-            string v = BuscarExtra(item, clave);
-            if (string.IsNullOrEmpty(v)) continue;
-            total++;
-            if (double.TryParse(v, System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out _)) num++;
-        }
-        bool result = total > 0 && num >= total * 0.75;
-        _numericCache[clave] = result;
-        return result;
-    }
-
     static void Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.Title = "Data Fusion Arena – Consola";
+
         MostrarBanner();
+
         bool continuar = true;
         while (continuar)
             continuar = MostrarMenu();
+
         Console.WriteLine("\n¡Hasta luego! 🎮\n");
     }
 
@@ -77,7 +49,6 @@ class Program
     static void ReconstruirColumnas()
     {
         _columnas = new List<(string Display, string Clave, int Ancho)>();
-        _numericCache.Clear();
 
         var todasExtras = _datos
             .SelectMany(d => d.CamposExtra.Keys)
@@ -111,7 +82,7 @@ class Program
             readerMapeo = TxtDataReader.MapeoColumnas;
         }
         else if ((ultimaFuente == "mariadb" || ultimaFuente == "postgresql")
-                 && _ultimasColumnasBD.Count > 0)
+&& _ultimasColumnasBD.Count > 0)
         {
             readerCols = _ultimasColumnasBD;
             readerMapeo = _ultimoMapeoBD;
@@ -120,17 +91,21 @@ class Program
         if (readerCols != null && readerMapeo != null)
         {
             var yaAgregadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool usarCamposExtraDirecto = ultimaFuente == "txt";
             foreach (var col in readerCols)
             {
-                string clave = readerMapeo.TryGetValue(col, out var prop)
-                    ? prop.ToLower()
-                    : col.ToLowerInvariant();
+                string clave = usarCamposExtraDirecto
+                    ? col.ToLowerInvariant()
+                    : (readerMapeo.TryGetValue(col, out var prop)
+                        ? prop.ToLower()
+                        : col.ToLowerInvariant());
                 _columnas.Add((col, clave, EstimarAncho(clave, col)));
                 yaAgregadas.Add(col.ToLowerInvariant());
             }
             if (!yaAgregadas.Contains("fuente"))
                 _columnas.Add(("Fuente", "fuente", 12));
-            // Solo columnas del lector/conector actual — no extras de otras fuentes
+            foreach (var k in todasExtras.Where(k => !yaAgregadas.Contains(k.ToLowerInvariant())))
+                _columnas.Add((k, k.ToLowerInvariant(), Math.Max(k.Length + 2, 8)));
         }
         else
         {
@@ -143,7 +118,7 @@ class Program
             var yaAgregadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
                 { "id", "nombre", "categoria", "valor", "fecha", "fuente" };
             foreach (var k in todasExtras.Where(k => !yaAgregadas.Contains(k.ToLowerInvariant())))
-                _columnas.Add((k, k.ToLowerInvariant(), Math.Clamp(k.Length + 2, 8, 25)));
+                _columnas.Add((k, k.ToLowerInvariant(), Math.Max(k.Length + 2, 8)));
         }
 
         AjustarAnchosAlContenido();
@@ -154,16 +129,20 @@ class Program
         if (_datos.Count == 0) return;
         var muestra = _datos.Count > 200 ? _datos.Take(200).ToList() : _datos;
 
+        const int MAX_ANCHO = 50;
+
         for (int c = 0; c < _columnas.Count; c++)
         {
             var (display, clave, _) = _columnas[c];
             int maxLen = display.Length;
             foreach (var item in muestra)
             {
-                int len = ObtenerValorCelda(item, clave, display).Length;
+                int len = ObtenerValorCelda(item, clave).Length;
                 if (len > maxLen) maxLen = len;
             }
-            _columnas[c] = (display, clave, Math.Clamp(maxLen, Math.Max(display.Length, 4), 35));
+            int minAncho = Math.Max(display.Length, 4);
+            int anchoFinal = maxLen > MAX_ANCHO ? MAX_ANCHO : Math.Max(maxLen, minAncho);
+            _columnas[c] = (display, clave, anchoFinal);
         }
     }
 
@@ -178,32 +157,18 @@ class Program
         _ => Math.Max(12, display.Length)
     };
 
-    static string ObtenerValorCelda(DataItem item, string clave, string display = "")
+    static string ObtenerValorCelda(DataItem item, string clave) => clave switch
     {
-        string disp = string.IsNullOrEmpty(display) ? clave : display;
-        switch (clave)
-        {
-            case "id": return item.Id.ToString();
-            case "nombre": return item.Nombre;
-            case "categoria": return item.Categoria;
-            case "valor":
-                return EsMoneda(disp)
-                    ? "$" + item.Valor.ToString("N2")
-                    : item.Valor.ToString("F2");
-            case "fecha":
-                return item.Fecha == new DateTime(item.Fecha.Year, 1, 1)
-                    ? item.Fecha.Year.ToString()
-                    : item.Fecha.ToString("yyyy-MM-dd");
-            case "fuente": return item.Fuente;
-            default:
-                string raw = BuscarExtra(item, clave);
-                if (!string.IsNullOrEmpty(raw) && EsMoneda(disp) && EsColumnaNumericaExtra(clave)
-                    && double.TryParse(raw, System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture, out double v))
-                    return "$" + v.ToString("N2");
-                return raw;
-        }
-    }
+        "id" => item.Id.ToString(),
+        "nombre" => item.Nombre,
+        "categoria" => item.Categoria,
+        "valor" => item.Valor.ToString("F2"),
+        "fecha" => item.Fecha == new DateTime(item.Fecha.Year, 1, 1)
+                           ? item.Fecha.Year.ToString()
+                           : item.Fecha.ToString("yyyy-MM-dd"),
+        "fuente" => item.Fuente,
+        _ => BuscarExtra(item, clave)
+    };
 
     static string BuscarExtra(DataItem item, string clave)
     {
@@ -225,12 +190,12 @@ class Program
     {
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine(@"
- ██████╗  █████╗ ████████╗ █████╗     ███████╗██╗   ██╗███████╗██╗ ██████╗ ███╗   ██╗
- ██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗    ██╔════╝██║   ██║██╔════╝██║██╔═══██╗████╗  ██║
- ██║  ██║███████║   ██║   ███████║    █████╗  ██║   ██║███████╗██║██║   ██║██╔██╗ ██║
- ██║  ██║██╔══██║   ██║   ██╔══██║    ██╔══╝  ██║   ██║╚════██║██║██║   ██║██║╚██╗██║
- ██████╔╝██║  ██║   ██║   ██║  ██║    ██║     ╚██████╔╝███████║██║╚██████╔╝██║ ╚████║
- ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝      ╚═════╝ ╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═══╝
+██████╗  █████╗ ████████╗ █████╗     ███████╗██╗   ██╗███████╗██╗ ██████╗ ███╗   ██╗
+██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗    ██╔════╝██║   ██║██╔════╝██║██╔═══██╗████╗  ██║
+██║  ██║███████║   ██║   ███████║    █████╗  ██║   ██║███████╗██║██║   ██║██╔██╗ ██║
+██║  ██║██╔══██║   ██║   ██╔══██║    ██╔══╝  ██║   ██║╚════██║██║██║   ██║██║╚██╗██║
+██████╔╝██║  ██║   ██║   ██║  ██║    ██║     ╚██████╔╝███████║██║╚██████╔╝██║ ╚████║
+╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝      ╚═════╝ ╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═══╝
                          Administración y Organización de Datos
 ");
         Console.ResetColor();
@@ -253,6 +218,7 @@ class Program
         Console.WriteLine("  [7] 🔢  Estadísticas por categoría");
         Console.WriteLine("  [8] 📊  Gráfica de barras en consola");
         Console.WriteLine("  [9] 🧹  Detectar y eliminar duplicados");
+        Console.WriteLine("  [E] 💾  Exportar datos");
         Console.WriteLine("  [L] ⚡  Bonus: operaciones LINQ");
         Console.WriteLine("  [0] 🚪  Salir");
         Console.Write("\n  Opción: ");
@@ -271,6 +237,7 @@ class Program
             case "7": MostrarEstadisticas(); break;
             case "8": GraficaBarras(); break;
             case "9": GestionarDuplicados(); break;
+            case "E": ExportarDatos(); break;
             case "L": BonusLinq(); break;
             case "0": return false;
             default: Color(ConsoleColor.Red, "  ⚠  Opción no válida.\n"); break;
@@ -279,7 +246,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  CARGA DE ARCHIVOS
+    //  NIVEL 1 y 2 – Carga de archivos
     // ══════════════════════════════════════════════════════════════
 
     static void CargarArchivos()
@@ -367,7 +334,7 @@ class Program
         DataProcessor.AgregarDatos(_datos, TxtDataReader.Leer(ruta));
 
     // ══════════════════════════════════════════════════════════════
-    //  BASES DE DATOS
+    //  NIVEL 3 – Bases de datos
     // ══════════════════════════════════════════════════════════════
 
     static void ConectarBD()
@@ -449,7 +416,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  TABLA DINÁMICA
+    //  NIVEL 6 – Tabla DINÁMICA
     // ══════════════════════════════════════════════════════════════
 
     static void VerTodos()
@@ -465,28 +432,16 @@ class Program
     {
         if (lista.Count == 0) { Color(ConsoleColor.Yellow, "  Sin registros."); return; }
 
-        // Pre-computar columnas numéricas y de moneda
-        var numericClaves = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var currencyDisplays = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (disp, clave, _) in _columnas)
-        {
-            bool esNum = EsColumnaNumericaExtra(clave);
-            if (esNum) numericClaves.Add(clave);
-            if (EsMoneda(disp) && esNum) currencyDisplays.Add(disp);
-        }
-
         int anchoTotal = _columnas.Sum(c => c.Ancho) + (_columnas.Count - 1) * 3 + 2;
         string sep = new string('─', anchoTotal);
 
-        // Encabezado
         Console.ForegroundColor = ConsoleColor.DarkCyan;
         Console.Write("  ");
         for (int c = 0; c < _columnas.Count; c++)
         {
             var (display, clave, ancho) = _columnas[c];
             string hdr = display.Length > ancho ? display[..ancho] : display;
-            bool esNum = clave is "valor" or "id" || numericClaves.Contains(clave);
-            string celda = esNum ? hdr.PadLeft(ancho) : hdr.PadRight(ancho);
+            string celda = clave is "valor" or "id" ? hdr.PadLeft(ancho) : hdr.PadRight(ancho);
             Console.Write(celda);
             if (c < _columnas.Count - 1) Console.Write(" │ ");
         }
@@ -506,11 +461,9 @@ class Program
             Console.Write("  ");
             for (int c = 0; c < _columnas.Count; c++)
             {
-                var (display, clave, ancho) = _columnas[c];
-                string val = ObtenerValorCelda(item, clave, display);
+                var (_, clave, ancho) = _columnas[c];
+                string val = ObtenerValorCelda(item, clave);
                 if (val.Length > ancho) val = val[..(ancho - 1)] + "…";
-
-                bool esNum = clave is "valor" or "id" || numericClaves.Contains(clave);
 
                 if (clave == "fuente")
                 {
@@ -518,17 +471,8 @@ class Program
                     Console.Write(val.PadRight(ancho));
                     Console.ResetColor();
                 }
-                else if (esNum)
-                {
-                    if (currencyDisplays.Contains(display))
-                    {
-                        Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.Write(val.PadLeft(ancho));
-                        Console.ResetColor();
-                    }
-                    else
-                        Console.Write(val.PadLeft(ancho));
-                }
+                else if (clave is "valor" or "id")
+                    Console.Write(val.PadLeft(ancho));
                 else
                     Console.Write(val.PadRight(ancho));
 
@@ -544,7 +488,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  FILTRAR Y ORDENAR
+    //  NIVEL 5 – Filtrado y Ordenamiento
     // ══════════════════════════════════════════════════════════════
 
     static void FiltrarDatos()
@@ -584,7 +528,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  DICTIONARY POR CATEGORÍA
+    //  NIVEL 4 – Dictionary por categoría
     // ══════════════════════════════════════════════════════════════
 
     static void VerPorCategoria()
@@ -595,15 +539,15 @@ class Program
         Console.WriteLine("  Categorías disponibles:\n");
         int i = 1;
         var cats = _porCategoria.Keys.ToList();
-        foreach (var cat in cats)
-            Console.WriteLine($"  [{i++,2}] {cat,-25} → {_porCategoria[cat].Count} registros");
+        foreach (var c in cats)
+            Console.WriteLine($"  [{i++,2}] {c,-25} → {_porCategoria[c].Count} registros");
 
         Console.Write("\n  Selecciona número (0 = ver todas): ");
         if (int.TryParse(Console.ReadLine()?.Trim(), out int sel) && sel > 0 && sel <= cats.Count)
         {
-            string cat2 = cats[sel - 1];
-            Color(ConsoleColor.Cyan, $"\n  Categoría: {cat2}\n");
-            ImprimirTabla(_porCategoria[cat2]);
+            string cat = cats[sel - 1];
+            Color(ConsoleColor.Cyan, $"\n  Categoría: {cat}\n");
+            ImprimirTabla(_porCategoria[cat]);
         }
         else
         {
@@ -616,7 +560,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  ESTADÍSTICAS Y GRÁFICAS
+    //  NIVEL 5 – Estadísticas y Gráficas
     // ══════════════════════════════════════════════════════════════
 
     static void MostrarEstadisticas()
@@ -662,7 +606,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  DUPLICADOS
+    //  NIVEL 5 – Duplicados
     // ══════════════════════════════════════════════════════════════
 
     static void GestionarDuplicados()
@@ -686,6 +630,194 @@ class Program
             ActualizarIndices();
             Color(ConsoleColor.Green, $"  ✅ Eliminados {antes - _datos.Count} duplicados. Quedan {_datos.Count} registros.");
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  EXPORTAR DATOS
+    // ══════════════════════════════════════════════════════════════
+
+    static void ExportarDatos()
+    {
+        Titulo("EXPORTAR DATOS");
+        if (_datos.Count == 0) { Color(ConsoleColor.Yellow, "  Sin datos para exportar."); return; }
+
+        Console.WriteLine($"  Registros disponibles: {_datos.Count}\n");
+        Console.WriteLine("  Formato de salida:");
+        Console.WriteLine("  [1] CSV   (.csv)");
+        Console.WriteLine("  [2] JSON  (.json)");
+        Console.WriteLine("  [3] XML   (.xml)");
+        Console.WriteLine("  [4] TXT   (.txt, pipe-separated)");
+        Console.Write("\n  Opción: ");
+        string? opFormato = Console.ReadLine()?.Trim();
+        if (string.IsNullOrEmpty(opFormato) || !new[] { "1", "2", "3", "4" }.Contains(opFormato))
+        { Color(ConsoleColor.Yellow, "  Opción no válida, cancelado."); return; }
+
+        Console.Write("\n  Ruta de salida (ENTER = escritorio): ");
+        string? rutaInput = Console.ReadLine()?.Trim().Trim('"').Trim('\'').Trim();
+
+        string carpeta;
+        if (string.IsNullOrWhiteSpace(rutaInput))
+            carpeta = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        else if (Directory.Exists(rutaInput))
+            carpeta = rutaInput;
+        else
+        {
+            string? dir = Path.GetDirectoryName(rutaInput);
+            carpeta = string.IsNullOrEmpty(dir) ? Environment.GetFolderPath(Environment.SpecialFolder.Desktop) : dir;
+        }
+
+        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        string ext = opFormato switch { "1" => ".csv", "2" => ".json", "3" => ".xml", _ => ".txt" };
+        string nombreArchivo = $"DataFusionArena_Export_{timestamp}{ext}";
+        string rutaSalida = Path.Combine(carpeta, nombreArchivo);
+
+        try
+        {
+            var (columnas, mapeo) = ObtenerInfoExport();
+            switch (opFormato)
+            {
+                case "1": ExportarCsv(rutaSalida, columnas, mapeo); break;
+                case "2": ExportarJson(rutaSalida, columnas, mapeo); break;
+                case "3": ExportarXml(rutaSalida, columnas, mapeo); break;
+                case "4": ExportarTxt(rutaSalida, columnas, mapeo); break;
+            }
+            Color(ConsoleColor.Green, $"\n  ✅ Exportado exitosamente:\n     {rutaSalida}");
+        }
+        catch (Exception ex)
+        {
+            Color(ConsoleColor.Red, $"\n  ❌ Error al exportar: {ex.Message}");
+        }
+    }
+
+    // ── Helpers de exportación ────────────────────────────────────
+
+    /// <summary>
+    /// Devuelve la lista de columnas originales y su mapeo para exportar.
+    /// Prioridad: último reader usado → CamposExtra keys → columnas por defecto.
+    /// </summary>
+    static (List<string> columnas, Dictionary<string, string> mapeo) ObtenerInfoExport()
+    {
+        string ultimaFuente = _datos.Count > 0 ? _datos[^1].Fuente : "";
+
+        if (ultimaFuente == "csv" && CsvDataReader.UltimasColumnas.Count > 0)
+            return (new List<string>(CsvDataReader.UltimasColumnas), CsvDataReader.MapeoColumnas);
+        if (ultimaFuente == "json" && JsonDataReader.UltimasColumnas.Count > 0)
+            return (new List<string>(JsonDataReader.UltimasColumnas), JsonDataReader.MapeoColumnas);
+        if (ultimaFuente == "xml" && XmlDataReader.UltimasColumnas.Count > 0)
+            return (new List<string>(XmlDataReader.UltimasColumnas), XmlDataReader.MapeoColumnas);
+        if (ultimaFuente == "txt" && TxtDataReader.UltimasColumnas.Count > 0)
+            return (new List<string>(TxtDataReader.UltimasColumnas), TxtDataReader.MapeoColumnas);
+        if ((ultimaFuente == "mariadb" || ultimaFuente == "postgresql") && _ultimasColumnasBD.Count > 0)
+            return (new List<string>(_ultimasColumnasBD), _ultimoMapeoBD);
+
+        // Fallback: claves de CamposExtra
+        var extraKeys = _datos.SelectMany(d => d.CamposExtra.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(k => k).ToList();
+        if (extraKeys.Count > 0)
+            return (extraKeys, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+        // Default mínimo
+        return (new List<string> { "id", "nombre", "categoria", "valor", "fecha", "fuente" },
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Obtiene el valor de una columna para un item:
+    /// primero busca en CamposExtra (valor RAW original),
+    /// luego hace fallback al campo DataItem mapeado.
+    /// </summary>
+    static string GetValorExport(DataItem item, string col, Dictionary<string, string> mapeo)
+    {
+        if (item.CamposExtra.TryGetValue(col, out var v)) return v ?? "";
+        if (item.CamposExtra.TryGetValue(col.ToLowerInvariant(), out v)) return v ?? "";
+
+        string campo = mapeo.TryGetValue(col, out var m) ? m.ToLower() : col.ToLower();
+        return campo switch
+        {
+            "id" => item.Id.ToString(),
+            "nombre" => item.Nombre ?? "",
+            "categoria" => item.Categoria ?? "",
+            "valor" => item.Valor.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "fecha" => item.Fecha.ToString("yyyy-MM-dd"),
+            "fuente" => item.Fuente ?? "",
+            _ => ""
+        };
+    }
+
+    static void ExportarCsv(string ruta, List<string> columnas, Dictionary<string, string> mapeo)
+    {
+        var lineas = new List<string>();
+        lineas.Add(string.Join(",", columnas.Select(c => EscapeCsv(c))));
+        foreach (var item in _datos)
+            lineas.Add(string.Join(",", columnas.Select(c => EscapeCsv(GetValorExport(item, c, mapeo)))));
+        File.WriteAllLines(ruta, lineas, System.Text.Encoding.UTF8);
+    }
+
+    static void ExportarJson(string ruta, List<string> columnas, Dictionary<string, string> mapeo)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("[");
+        for (int i = 0; i < _datos.Count; i++)
+        {
+            var item = _datos[i];
+            sb.AppendLine("  {");
+            for (int c = 0; c < columnas.Count; c++)
+            {
+                string col = columnas[c];
+                string val = GetValorExport(item, col, mapeo);
+                bool isLast = c == columnas.Count - 1;
+                bool esNum = double.TryParse(val, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out _)
+                    && val.Length > 0;
+                string jsonVal = esNum ? val : JsonStr(val);
+                sb.AppendLine($"    {JsonStr(col)}: {jsonVal}{(isLast ? "" : ",")}");
+            }
+            sb.Append("  }");
+            if (i < _datos.Count - 1) sb.AppendLine(",");
+            else sb.AppendLine();
+        }
+        sb.AppendLine("]");
+        File.WriteAllText(ruta, sb.ToString(), System.Text.Encoding.UTF8);
+    }
+
+    static void ExportarXml(string ruta, List<string> columnas, Dictionary<string, string> mapeo)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        sb.AppendLine("<dataset>");
+        foreach (var item in _datos)
+        {
+            sb.AppendLine("  <registro>");
+            foreach (var col in columnas)
+            {
+                string tag = XmlTag(col);
+                string val = GetValorExport(item, col, mapeo);
+                sb.AppendLine($"    <{tag}>{XmlEscape(val)}</{tag}>");
+            }
+            sb.AppendLine("  </registro>");
+        }
+        sb.AppendLine("</dataset>");
+        File.WriteAllText(ruta, sb.ToString(), System.Text.Encoding.UTF8);
+    }
+
+    static void ExportarTxt(string ruta, List<string> columnas, Dictionary<string, string> mapeo)
+    {
+        var lineas = new List<string>();
+        lineas.Add(string.Join("|", columnas));
+        foreach (var item in _datos)
+            lineas.Add(string.Join("|", columnas.Select(c =>
+                GetValorExport(item, c, mapeo).Replace("|", " "))));
+        File.WriteAllLines(ruta, lineas, System.Text.Encoding.UTF8);
+    }
+
+    static string EscapeCsv(string v) => $"\"{v.Replace("\"", "\"\"")}\"";
+    static string JsonStr(string v) => $"\"{v.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "")}\"";
+    static string XmlEscape(string v) => v.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;").Replace("'", "&apos;");
+    static string XmlTag(string k)
+    {
+        string t = System.Text.RegularExpressions.Regex.Replace(k, @"[^a-zA-Z0-9_\-]", "_");
+        if (t.Length > 0 && char.IsDigit(t[0])) t = "_" + t;
+        return string.IsNullOrEmpty(t) ? "campo" : t;
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -734,7 +866,6 @@ class Program
     {
         _porCategoria = DataProcessor.AgruparPorCategoria(_datos);
         _porId = DataProcessor.IndexarPorId(_datos);
-        _numericCache.Clear();
     }
 
     static string LeerContraseña()
@@ -744,9 +875,15 @@ class Program
         while ((key = Console.ReadKey(intercept: true)).Key != ConsoleKey.Enter)
         {
             if (key.Key == ConsoleKey.Backspace && sb.Length > 0)
-            { sb.Remove(sb.Length - 1, 1); Console.Write("\b \b"); }
+            {
+                sb.Remove(sb.Length - 1, 1);
+                Console.Write("\b \b");
+            }
             else if (key.Key != ConsoleKey.Backspace)
-            { sb.Append(key.KeyChar); Console.Write('*'); }
+            {
+                sb.Append(key.KeyChar);
+                Console.Write('*');
+            }
         }
         Console.WriteLine();
         return sb.ToString();
