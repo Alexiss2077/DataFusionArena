@@ -2,6 +2,7 @@ using DataFusionArena.Shared.Models;
 using DataFusionArena.Shared.Readers;
 using DataFusionArena.Shared.Database;
 using DataFusionArena.Shared.Processing;
+using DataFusionArena.Shared.Services;
 using System.Data;
 using System.Reflection;
 using System.Globalization;
@@ -39,14 +40,13 @@ public partial class MainForm : Form
         ("Valor","valor"),("Fecha","fecha"),("Fuente","fuente")
     };
 
-    // ── Detección numérica y de moneda ────────────────────────────
     private readonly HashSet<string> _numericDisplays = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _currencyDisplays = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly string[] _kwMoneda = {
-        "price", "precio", "monto", "costo", "cost", "revenue",
-        "salary", "salario", "ventas", "sales", "importe", "amount",
-        "fee", "wage", "income", "ingreso", "earning", "pago", "payment", "ganancia"
+        "price","precio","monto","costo","cost","revenue",
+        "salary","salario","ventas","sales","importe","amount",
+        "fee","wage","income","ingreso","earning","pago","payment","ganancia"
     };
 
     private static bool EsMonedaDisplay(string display) =>
@@ -103,26 +103,22 @@ public partial class MainForm : Form
         bool usarXml = _ultimoTipoCargado == "xml" && XmlDataReader.UltimasColumnas.Count > 0;
         bool usarTxt = _ultimoTipoCargado == "txt" && TxtDataReader.UltimasColumnas.Count > 0;
 
-        if (usarPg)
-            BuildFromConnector(_lastPgConnector!.UltimasColumnas, _lastPgConnector.MapeoColumnas);
-        else if (usarMd)
-            BuildFromConnector(_lastMdConnector!.UltimasColumnas, _lastMdConnector.MapeoColumnas);
-        else if (usarCsv)
-            BuildFromReader(CsvDataReader.UltimasColumnas, CsvDataReader.MapeoColumnas);
-        else if (usarJson)
-            BuildFromReader(JsonDataReader.UltimasColumnas, JsonDataReader.MapeoColumnas);
-        else if (usarXml)
-            BuildFromReader(XmlDataReader.UltimasColumnas, XmlDataReader.MapeoColumnas);
-        else if (usarTxt)
-            BuildFromReader(TxtDataReader.UltimasColumnas, TxtDataReader.MapeoColumnas);
+        if (usarPg) BuildFromConnector(_lastPgConnector!.UltimasColumnas, _lastPgConnector.MapeoColumnas);
+        else if (usarMd) BuildFromConnector(_lastMdConnector!.UltimasColumnas, _lastMdConnector.MapeoColumnas);
+        else if (usarCsv) BuildFromReader(CsvDataReader.UltimasColumnas, CsvDataReader.MapeoColumnas);
+        else if (usarJson) BuildFromReader(JsonDataReader.UltimasColumnas, JsonDataReader.MapeoColumnas);
+        else if (usarXml) BuildFromReader(XmlDataReader.UltimasColumnas, XmlDataReader.MapeoColumnas);
+        else if (usarTxt) BuildFromReader(TxtDataReader.UltimasColumnas, TxtDataReader.MapeoColumnas);
         else
         {
             foreach (var col in _colsDefault) _infoColumnas.Add(col);
             var ya = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                { "id", "nombre", "categoria", "valor", "fecha", "fuente" };
-            foreach (var k in _datos.SelectMany(d => d.CamposExtra.Keys)
+                { "id","nombre","categoria","valor","fecha","fuente" };
+            foreach (var k in _datos
+                .SelectMany(d => d.CamposExtra.Keys)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(k => !ya.Contains(k.ToLower())).OrderBy(k => k))
+                .Where(k => !ya.Contains(k.ToLower()))
+                .OrderBy(k => k))
                 _infoColumnas.Add((k, k.ToLower()));
         }
     }
@@ -137,7 +133,6 @@ public partial class MainForm : Form
             ya.Add(col.ToLowerInvariant());
         }
         if (!ya.Contains("fuente")) _infoColumnas.Add(("Fuente", "fuente"));
-        // Solo columnas del lector actual — no extras de otras fuentes
     }
 
     private void BuildFromConnector(List<string> columnas, Dictionary<string, string> mapeo)
@@ -150,7 +145,6 @@ public partial class MainForm : Form
             ya.Add(col.ToLowerInvariant());
         }
         if (!ya.Contains("fuente")) _infoColumnas.Add(("Fuente", "fuente"));
-        // Solo columnas del conector actual — no extras de otras fuentes
     }
 
     private void RefrescarComboboxes()
@@ -194,12 +188,10 @@ public partial class MainForm : Form
 
             if (clave == "valor")
             {
-                if (EsMonedaDisplay(display))
-                    _currencyDisplays.Add(display);
+                if (EsMonedaDisplay(display)) _currencyDisplays.Add(display);
                 continue;
             }
 
-            // Columnas extra: detectar numéricos por muestreo
             int num = 0, total = 0;
             foreach (var item in sample)
             {
@@ -211,8 +203,7 @@ public partial class MainForm : Form
             if (total > 0 && num >= total * 0.75)
             {
                 _numericDisplays.Add(display);
-                if (EsMonedaDisplay(display))
-                    _currencyDisplays.Add(display);
+                if (EsMonedaDisplay(display)) _currencyDisplays.Add(display);
             }
         }
     }
@@ -235,27 +226,17 @@ public partial class MainForm : Form
         foreach (var (display, clave) in _infoColumnas)
         {
             bool esNumerico = clave is "id" or "valor" || _numericDisplays.Contains(display);
-            if (!esNumerico && clave != "fecha")
-                cmbGrupoGrafica.Items.Add(display);
-            if (esNumerico && clave != "id")
-                cmbMetricaGrafica.Items.Add(display);
+            if (!esNumerico && clave != "fecha") cmbGrupoGrafica.Items.Add(display);
+            if (esNumerico && clave != "id") cmbMetricaGrafica.Items.Add(display);
         }
 
-        // Restaurar selección o elegir defaults inteligentes
         int gi = cmbGrupoGrafica.FindStringExact(prevGrupo);
-        if (gi < 0)
-        {
-            gi = cmbGrupoGrafica.FindStringExact("Categoría");
-            if (gi < 0 && cmbGrupoGrafica.Items.Count > 0) gi = 0;
-        }
-        if (gi >= 0 && gi < cmbGrupoGrafica.Items.Count)
-            cmbGrupoGrafica.SelectedIndex = gi;
+        if (gi < 0) { gi = cmbGrupoGrafica.FindStringExact("Categoría"); if (gi < 0 && cmbGrupoGrafica.Items.Count > 0) gi = 0; }
+        if (gi >= 0 && gi < cmbGrupoGrafica.Items.Count) cmbGrupoGrafica.SelectedIndex = gi;
 
         int mi = cmbMetricaGrafica.FindStringExact(prevMetrica);
-        if (mi < 0)
-            mi = cmbMetricaGrafica.Items.Count > 1 ? 1 : 0;
-        if (mi >= 0 && mi < cmbMetricaGrafica.Items.Count)
-            cmbMetricaGrafica.SelectedIndex = mi;
+        if (mi < 0) mi = cmbMetricaGrafica.Items.Count > 1 ? 1 : 0;
+        if (mi >= 0 && mi < cmbMetricaGrafica.Items.Count) cmbMetricaGrafica.SelectedIndex = mi;
     }
 
     private void ActualizarChart()
@@ -293,7 +274,7 @@ public partial class MainForm : Form
                     "valor" => item.Valor,
                     "id" => item.Id,
                     _ => double.TryParse(BuscarExtra(item, metricaClv),
-                            NumberStyles.Any, CultureInfo.InvariantCulture, out double v) ? v : 0
+                                    NumberStyles.Any, CultureInfo.InvariantCulture, out double v) ? v : 0
                 };
             }
 
@@ -376,8 +357,9 @@ public partial class MainForm : Form
     {
         if (!File.Exists(ruta))
         {
-            if (!silencioso) MessageBox.Show($"Archivo no encontrado:\n{ruta}",
-                "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (!silencioso)
+                MessageBox.Show($"Archivo no encontrado:\n{ruta}",
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         ActualizarEstadoBarra($"⏳ Leyendo {Path.GetFileName(ruta)}...");
@@ -408,6 +390,101 @@ public partial class MainForm : Form
         if (!silencioso)
             ActualizarEstadoBarra(
                 $"✅ {nuevos.Count} registros cargados desde {Path.GetFileName(ruta)}. Total: {_datos.Count}");
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  EXPORTAR DATOS
+    // ══════════════════════════════════════════════════════════════
+
+    private void BtnExportarCsv_Click(object? sender, EventArgs e) => _ = ExportarAsync("csv");
+    private void BtnExportarJson_Click(object? sender, EventArgs e) => _ = ExportarAsync("json");
+    private void BtnExportarXml_Click(object? sender, EventArgs e) => _ = ExportarAsync("xml");
+    private void BtnExportarTxt_Click(object? sender, EventArgs e) => _ = ExportarAsync("txt");
+
+    private async Task ExportarAsync(string formato)
+    {
+        var datos = _datosVista.Count > 0 ? _datosVista : _datosBase;
+        if (datos.Count == 0)
+        {
+            MessageBox.Show("No hay datos para exportar.\nCarga archivos o conecta una base de datos primero.",
+                "Sin datos", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        string ext = formato;
+        string filter = formato switch
+        {
+            "csv" => "CSV (*.csv)|*.csv",
+            "json" => "JSON (*.json)|*.json",
+            "xml" => "XML (*.xml)|*.xml",
+            "txt" => "TXT pipe-separated (*.txt)|*.txt",
+            _ => "Todos|*.*"
+        };
+
+        using var dlg = new SaveFileDialog
+        {
+            Title = $"Exportar datos a {formato.ToUpper()}",
+            Filter = filter,
+            FileName = $"DataFusionArena_Export_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
+        };
+
+        if (dlg.ShowDialog() != DialogResult.OK) return;
+
+        // Construir columnas y mapeo desde _infoColumnas actual
+        var columnas = _infoColumnas.Select(c => c.Display).ToList();
+        var mapeo = _infoColumnas.ToDictionary(
+            c => c.Display, c => c.Clave, StringComparer.OrdinalIgnoreCase);
+
+        ActualizarEstadoBarra($"💾 Exportando {datos.Count} registros a {formato.ToUpper()}...");
+
+        // Deshabilitar botones de exportar mientras se procesa
+        tsBtnExportCsv.Enabled = false;
+        tsBtnExportJson.Enabled = false;
+        tsBtnExportXml.Enabled = false;
+        tsBtnExportTxt.Enabled = false;
+
+        try
+        {
+            var snapshot = new List<DataItem>(datos); // copia segura para el thread
+            await Task.Run(() =>
+            {
+                switch (formato)
+                {
+                    case "csv": FileExportService.ExportarCsv(dlg.FileName, snapshot, columnas, mapeo); break;
+                    case "json": FileExportService.ExportarJson(dlg.FileName, snapshot, columnas, mapeo); break;
+                    case "xml": FileExportService.ExportarXml(dlg.FileName, snapshot, columnas, mapeo); break;
+                    case "txt": FileExportService.ExportarTxt(dlg.FileName, snapshot, columnas, mapeo); break;
+                }
+            });
+
+            long bytes = new FileInfo(dlg.FileName).Length;
+            string size = bytes >= 1_048_576
+                ? $"{bytes / 1_048_576.0:F1} MB"
+                : $"{bytes / 1024.0:F0} KB";
+
+            ActualizarEstadoBarra($"✅ Exportado: {Path.GetFileName(dlg.FileName)} ({size})");
+            MessageBox.Show(
+                $"✅ Exportado exitosamente\n\n" +
+                $"Formato:    {formato.ToUpper()}\n" +
+                $"Registros:  {snapshot.Count:N0}\n" +
+                $"Tamaño:     {size}\n\n" +
+                $"📁 {dlg.FileName}",
+                "Exportar", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            ActualizarEstadoBarra($"❌ Error al exportar: {ex.Message}");
+            MessageBox.Show($"Error al exportar:\n{ex.Message}",
+                "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            tsBtnExportCsv.Enabled = true;
+            tsBtnExportJson.Enabled = true;
+            tsBtnExportXml.Enabled = true;
+            tsBtnExportTxt.Enabled = true;
+        }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -566,12 +643,12 @@ public partial class MainForm : Form
         {
             foreach (var (h, w, a) in new (string, int, DataGridViewAutoSizeColumnMode)[]
             {
-                ("Categoría",0,DataGridViewAutoSizeColumnMode.Fill),
-                ("Cant.",65,DataGridViewAutoSizeColumnMode.None),
-                ("Promedio",100,DataGridViewAutoSizeColumnMode.None),
-                ("Máximo",100,DataGridViewAutoSizeColumnMode.None),
-                ("Mínimo",100,DataGridViewAutoSizeColumnMode.None),
-                ("Total",120,DataGridViewAutoSizeColumnMode.None),
+                ("Categoría", 0,   DataGridViewAutoSizeColumnMode.Fill),
+                ("Cant.",      65,  DataGridViewAutoSizeColumnMode.None),
+                ("Promedio",   100, DataGridViewAutoSizeColumnMode.None),
+                ("Máximo",     100, DataGridViewAutoSizeColumnMode.None),
+                ("Mínimo",     100, DataGridViewAutoSizeColumnMode.None),
+                ("Total",      120, DataGridViewAutoSizeColumnMode.None),
             })
             {
                 var col = new DataGridViewTextBoxColumn
@@ -602,8 +679,9 @@ public partial class MainForm : Form
         ActualizarEstadoBarra("🔍 Detectando duplicados...");
         var dupes = await Task.Run(() => DataProcessor.DetectarDuplicados(_datos));
         await BindGridAsync(dgvProcesamiento, dupes, null);
-        lblProcInfo.Text = dupes.Count == 0 ? "✅ No se encontraron duplicados."
-                                            : $"⚠ {dupes.Count} duplicados encontrados.";
+        lblProcInfo.Text = dupes.Count == 0
+            ? "✅ No se encontraron duplicados."
+            : $"⚠ {dupes.Count} duplicados encontrados.";
         if (dupes.Count > 0) btnEliminarDuplicados.Enabled = true;
         ActualizarEstadoBarra($"Duplicados: {dupes.Count}");
     }
@@ -631,7 +709,9 @@ public partial class MainForm : Form
                 sb.Append(char.ToLowerInvariant(c));
         return sb.ToString();
     }
-    private static bool ContieneNorm(string t, string b) => Normalizar(t).Contains(Normalizar(b));
+
+    private static bool ContieneNorm(string t, string b) =>
+        Normalizar(t).Contains(Normalizar(b));
 
     private async void BtnLinqWhere_Click(object? sender, EventArgs e)
     {
@@ -686,8 +766,10 @@ public partial class MainForm : Form
 
     private void BtnLinqLimpiar_Click(object? sender, EventArgs e)
     {
-        txtLinqFiltro.Text = ""; dgvProcesamiento.DataSource = null;
-        dgvProcesamiento.Columns.Clear(); lblProcInfo.Text = "Resultados limpiados.";
+        txtLinqFiltro.Text = "";
+        dgvProcesamiento.DataSource = null;
+        dgvProcesamiento.Columns.Clear();
+        lblProcInfo.Text = "Resultados limpiados.";
         btnEliminarDuplicados.Enabled = false;
     }
 
@@ -717,6 +799,14 @@ public partial class MainForm : Form
         await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
         await ActualizarTabEstadisticasAsync();
         ActualizarChart();
+
+        // Habilitar/deshabilitar botones de exportar
+        bool hayDatos = _datosBase.Count > 0;
+        tsBtnExportCsv.Enabled = hayDatos;
+        tsBtnExportJson.Enabled = hayDatos;
+        tsBtnExportXml.Enabled = hayDatos;
+        tsBtnExportTxt.Enabled = hayDatos;
+        menuExportar.Enabled = hayDatos;
 
         lblTotalRegistros.Text = $"Total registros: {_datos.Count}";
         lblTotalCategorias.Text = $"Categorías: {_porCategoria.Count}";
@@ -762,6 +852,14 @@ public partial class MainForm : Form
             await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
             await ActualizarTabEstadisticasAsync();
             ActualizarChart();
+
+            bool hayDatos = _datosBase.Count > 0;
+            tsBtnExportCsv.Enabled = hayDatos;
+            tsBtnExportJson.Enabled = hayDatos;
+            tsBtnExportXml.Enabled = hayDatos;
+            tsBtnExportTxt.Enabled = hayDatos;
+            menuExportar.Enabled = hayDatos;
+
             ActualizarEstadoBarra($"Mostrando {_datosVista.Count} registros de: " +
                 string.Join(", ", clbFuentes.CheckedItems.Cast<string>()));
         });
@@ -781,7 +879,6 @@ public partial class MainForm : Form
             ? new List<(string, string)>(_colsDefault)
             : new List<(string, string)>(_infoColumnas);
 
-        // Capturar snapshots para uso seguro en Task.Run
         var numSnap = new HashSet<string>(_numericDisplays, StringComparer.OrdinalIgnoreCase);
         var curSnap = new HashSet<string>(_currencyDisplays, StringComparer.OrdinalIgnoreCase);
 
@@ -818,9 +915,7 @@ public partial class MainForm : Form
             if (!string.IsNullOrEmpty(nombreDisplay) && col.ColumnName == nombreDisplay)
             { dgvCol.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; dgvCol.MinimumWidth = 150; }
 
-            // Alinear a la derecha columnas numéricas
-            bool esNumerico = clave is "id" or "valor"
-                || _numericDisplays.Contains(col.ColumnName);
+            bool esNumerico = clave is "id" or "valor" || _numericDisplays.Contains(col.ColumnName);
             if (esNumerico)
             {
                 dgvCol.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
@@ -837,7 +932,8 @@ public partial class MainForm : Form
 
         if (contadorLabel != null)
             contadorLabel.Text = limitado
-                ? $"⚠ Mostrando {DISPLAY_LIMIT:N0} de {totalReal:N0}" : $"{totalReal:N0} registros";
+                ? $"⚠ Mostrando {DISPLAY_LIMIT:N0} de {totalReal:N0}"
+                : $"{totalReal:N0} registros";
     }
 
     private static DataTable BuildDataTable(
@@ -869,7 +965,6 @@ public partial class MainForm : Form
                     case "fuente": row[display] = item.Fuente; break;
                     default:
                         string raw = BuscarExtra(item, clave);
-                        // Columnas extra de moneda: formatear con $
                         if (!string.IsNullOrEmpty(raw) && currencyDisplays.Contains(display)
                             && double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out double cv))
                             row[display] = "$" + cv.ToString("N2");
@@ -889,7 +984,6 @@ public partial class MainForm : Form
         if (e.RowIndex < 0) return;
         var dgv = (DataGridView)sender;
 
-        // Colorear filas por fuente
         if (dgv.Columns.Contains("Fuente"))
         {
             try
@@ -902,6 +996,7 @@ public partial class MainForm : Form
                     "txt" => Color.FromArgb(44, 16, 52),
                     "postgresql" => Color.FromArgb(8, 24, 70),
                     "mariadb" => Color.FromArgb(54, 24, 8),
+                    "LINQ GroupBy" => Color.FromArgb(20, 40, 20),
                     _ => Color.FromArgb(32, 32, 48)
                 };
                 e.CellStyle.BackColor = bgColor;
@@ -912,7 +1007,6 @@ public partial class MainForm : Form
             catch { }
         }
 
-        // Formatear columna de moneda (tipo double → "valor" mapeado a nombre de moneda)
         if (e.ColumnIndex >= 0 && e.ColumnIndex < dgv.Columns.Count && e.Value is double dv)
         {
             string colHeader = dgv.Columns[e.ColumnIndex].HeaderText;
@@ -932,15 +1026,16 @@ public partial class MainForm : Form
     {
         foreach (var dgv in new[] { dgvTodos, dgvCategoria, dgvProcesamiento })
         { dgv.AutoGenerateColumns = false; AplicarEstiloGrid(dgv); }
+
         dgvEstadisticas.Columns.Clear();
         foreach (var (h, w, a) in new (string, int, DataGridViewAutoSizeColumnMode)[]
         {
-            ("Categoría",0,DataGridViewAutoSizeColumnMode.Fill),
-            ("Cant.",65,DataGridViewAutoSizeColumnMode.None),
-            ("Promedio",100,DataGridViewAutoSizeColumnMode.None),
-            ("Máximo",100,DataGridViewAutoSizeColumnMode.None),
-            ("Mínimo",100,DataGridViewAutoSizeColumnMode.None),
-            ("Total",120,DataGridViewAutoSizeColumnMode.None),
+            ("Categoría", 0,   DataGridViewAutoSizeColumnMode.Fill),
+            ("Cant.",      65,  DataGridViewAutoSizeColumnMode.None),
+            ("Promedio",   100, DataGridViewAutoSizeColumnMode.None),
+            ("Máximo",     100, DataGridViewAutoSizeColumnMode.None),
+            ("Mínimo",     100, DataGridViewAutoSizeColumnMode.None),
+            ("Total",      120, DataGridViewAutoSizeColumnMode.None),
         })
         {
             var col = new DataGridViewTextBoxColumn
@@ -949,11 +1044,19 @@ public partial class MainForm : Form
             dgvEstadisticas.Columns.Add(col);
         }
         AplicarEstiloGrid(dgvEstadisticas);
+
+        // Botones exportar deshabilitados al inicio (no hay datos)
+        tsBtnExportCsv.Enabled = false;
+        tsBtnExportJson.Enabled = false;
+        tsBtnExportXml.Enabled = false;
+        tsBtnExportTxt.Enabled = false;
+        menuExportar.Enabled = false;
     }
 
     private static void AplicarEstiloGrid(DataGridView dgv)
     {
-        dgv.BackgroundColor = Color.FromArgb(18, 18, 28); dgv.GridColor = Color.FromArgb(55, 55, 75);
+        dgv.BackgroundColor = Color.FromArgb(18, 18, 28);
+        dgv.GridColor = Color.FromArgb(55, 55, 75);
         dgv.BorderStyle = BorderStyle.None;
         dgv.DefaultCellStyle.BackColor = Color.FromArgb(28, 28, 42);
         dgv.DefaultCellStyle.ForeColor = Color.FromArgb(230, 230, 240);
@@ -966,10 +1069,13 @@ public partial class MainForm : Form
         dgv.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
         dgv.ColumnHeadersHeight = 32;
         dgv.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
-        dgv.EnableHeadersVisualStyles = false; dgv.AllowUserToAddRows = false;
+        dgv.EnableHeadersVisualStyles = false;
+        dgv.AllowUserToAddRows = false;
         dgv.AllowUserToResizeRows = false;
         dgv.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        dgv.RowHeadersVisible = false; dgv.RowTemplate.Height = 24; dgv.ScrollBars = ScrollBars.Both;
+        dgv.RowHeadersVisible = false;
+        dgv.RowTemplate.Height = 24;
+        dgv.ScrollBars = ScrollBars.Both;
         dgv.ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText;
     }
 
@@ -982,7 +1088,8 @@ public partial class MainForm : Form
     {
         if (lblStatus.GetCurrentParent()?.InvokeRequired == true)
             lblStatus.GetCurrentParent().Invoke(() => lblStatus.Text = mensaje);
-        else lblStatus.Text = mensaje;
+        else
+            lblStatus.Text = mensaje;
         Application.DoEvents();
     }
 
@@ -1002,16 +1109,32 @@ public partial class MainForm : Form
     {
         if (MessageBox.Show("¿Limpiar todos los datos en memoria?", "Confirmar",
             MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
         _datos.Clear(); _porCategoria.Clear(); _porId.Clear();
         _datosBase.Clear(); _datosVista.Clear();
         _lastPgConnector = null; _lastMdConnector = null; _ultimoTipoCargado = "";
         _numericDisplays.Clear(); _currencyDisplays.Clear();
+
         foreach (var dgv in new[] { dgvTodos, dgvCategoria, dgvProcesamiento })
         { dgv.DataSource = null; dgv.Columns.Clear(); }
-        dgvEstadisticas.Rows.Clear(); lstCategorias.Items.Clear(); clbFuentes.Items.Clear();
-        cmbGrupoGrafica?.Items.Clear(); cmbMetricaGrafica?.Items.Clear();
-        txtLinqFiltro.Text = ""; lblProcInfo.Text = "Selecciona una operación.";
-        btnEliminarDuplicados.Enabled = false; chartMain.Limpiar(); lblContadorTodos.Text = "0 registros";
+
+        dgvEstadisticas.Rows.Clear();
+        lstCategorias.Items.Clear();
+        clbFuentes.Items.Clear();
+        cmbGrupoGrafica?.Items.Clear();
+        cmbMetricaGrafica?.Items.Clear();
+        txtLinqFiltro.Text = "";
+        lblProcInfo.Text = "Selecciona una operación.";
+        btnEliminarDuplicados.Enabled = false;
+        chartMain.Limpiar();
+        lblContadorTodos.Text = "0 registros";
+
+        tsBtnExportCsv.Enabled = false;
+        tsBtnExportJson.Enabled = false;
+        tsBtnExportXml.Enabled = false;
+        tsBtnExportTxt.Enabled = false;
+        menuExportar.Enabled = false;
+
         _infoColumnas.Clear();
         foreach (var col in _colsDefault) _infoColumnas.Add(col);
         RefrescarComboboxes();
@@ -1019,9 +1142,11 @@ public partial class MainForm : Form
     }
 
     private void MenuAcercaDe_Click(object sender, EventArgs e) =>
-        MessageBox.Show("Data Fusion Arena\nAdministración y Organización de Datos\n\n" +
+        MessageBox.Show(
+            "Data Fusion Arena\nAdministración y Organización de Datos\n\n" +
             "Ingeniería · 4.º Semestre · C# .NET 10 · WinForms\n\n" +
             "Fuentes: JSON · CSV · XML · TXT · PostgreSQL · MariaDB\n" +
+            "Exportar: CSV · JSON · XML · TXT\n" +
             "Estructuras: List<T> · Dictionary<TKey,TValue>\n" +
             "Gráficas: GDI+ propio (sin dependencias externas)",
             "Acerca de", MessageBoxButtons.OK, MessageBoxIcon.Information);

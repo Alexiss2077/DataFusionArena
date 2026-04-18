@@ -10,12 +10,15 @@ partial class MainForm
     private ToolStripMenuItem menuCargarPersonalizado, menuLimpiarDatos, menuSalir;
     private ToolStripMenuItem menuPostgres, menuMariaDB;
     private ToolStripMenuItem menuAcercaDe;
-    private ToolStripSeparator menuSep1, menuSep2;
+    private ToolStripMenuItem menuExportar, menuExportCsv, menuExportJson, menuExportXml, menuExportTxt;
+    private ToolStripSeparator menuSep1, menuSep2, menuSepExport;
 
     private ToolStrip toolStrip1;
     private ToolStripButton tsBtnCargarTodo, tsBtnJson, tsBtnCsv, tsBtnXml, tsBtnTxt;
     private ToolStripButton tsBtnPostgres, tsBtnMariaDB, tsBtnRefresh;
-    private ToolStripSeparator tsSep1, tsSep2, tsSep3;
+    private ToolStripButton tsBtnExportCsv, tsBtnExportJson, tsBtnExportXml, tsBtnExportTxt;
+    private ToolStripSeparator tsSep1, tsSep2, tsSep3, tsSep4;
+    private ToolStripLabel tsLblExport;
 
     private SplitContainer splitMain;
     private GroupBox grpFuentes;
@@ -44,7 +47,7 @@ partial class MainForm
     private Label lblTotalRegistros, lblTotalCategorias, lblTotalFuentes;
     private DataGridView dgvEstadisticas;
 
-    // Tab 4 – Gráficas
+    // Tab 4
     private Panel pnlGraficasTop;
     private Label lblTipoGrafica, lblGrupoGrafica, lblMetricaGrafica;
     private ComboBox cmbTipoGrafica, cmbGrupoGrafica, cmbMetricaGrafica;
@@ -80,6 +83,7 @@ partial class MainForm
         var fgWhite = Color.FromArgb(230, 230, 240);
         var fgCyan = Color.FromArgb(0, 200, 220);
         var fgYellow = Color.FromArgb(255, 200, 50);
+        var fgGreen = Color.FromArgb(0, 200, 100);
         var accentBlue = Color.FromArgb(0, 110, 200);
 
         SuspendLayout();
@@ -92,7 +96,12 @@ partial class MainForm
         WindowState = FormWindowState.Maximized;
 
         // ── MenuStrip ────────────────────────────────────────────
-        menuStrip1 = new MenuStrip { BackColor = bgMid, ForeColor = fgWhite, Renderer = new DarkMenuRenderer() };
+        menuStrip1 = new MenuStrip
+        {
+            BackColor = bgMid,
+            ForeColor = fgWhite,
+            Renderer = new DarkMenuRenderer()
+        };
 
         menuArchivo = MI("📂 Archivo", fgWhite);
         menuCargarJson = MI("JSON", Color.LightGreen, (s, e) => BtnCargarJson_Click(s, e));
@@ -101,12 +110,30 @@ partial class MainForm
         menuCargarTxt = MI("TXT", Color.Violet, (s, e) => BtnCargarTxt_Click(s, e));
         menuCargarPersonalizado = MI("Cargar archivo...", fgWhite, MenuCargarPersonalizado_Click!);
         menuSep1 = new ToolStripSeparator();
+
+        // Exportar submenu
+        menuExportar = MI("💾 Exportar datos", fgGreen);
+        menuExportCsv = MI("📄 CSV  (.csv)", Color.LightGreen, (s, e) => BtnExportarCsv_Click(s, e));
+        menuExportJson = MI("{ } JSON (.json)", Color.LightSkyBlue, (s, e) => BtnExportarJson_Click(s, e));
+        menuExportXml = MI("📋 XML  (.xml)", Color.Yellow, (s, e) => BtnExportarXml_Click(s, e));
+        menuExportTxt = MI("📝 TXT  (.txt)", Color.Violet, (s, e) => BtnExportarTxt_Click(s, e));
+        menuExportar.DropDownItems.AddRange(new ToolStripItem[]
+        {
+            menuExportCsv, menuExportJson, menuExportXml, menuExportTxt
+        });
+
+        menuSepExport = new ToolStripSeparator();
         menuLimpiarDatos = MI("Limpiar datos", Color.Tomato, MenuLimpiarDatos_Click!);
         menuSep2 = new ToolStripSeparator();
         menuSalir = MI("Salir", Color.Tomato, MenuSalir_Click!);
-        menuArchivo.DropDownItems.AddRange(new ToolStripItem[] {
+
+        menuArchivo.DropDownItems.AddRange(new ToolStripItem[]
+        {
             menuCargarJson, menuCargarCsv, menuCargarXml, menuCargarTxt,
-            menuCargarPersonalizado, menuSep1, menuLimpiarDatos, menuSep2, menuSalir });
+            menuCargarPersonalizado, menuSep1,
+            menuExportar, menuSepExport,
+            menuLimpiarDatos, menuSep2, menuSalir
+        });
 
         menuBaseDatos = MI("🗄️ Base de Datos", fgWhite);
         menuPostgres = MI("🐘 PostgreSQL", Color.LightSkyBlue, BtnConectarPostgres_Click!);
@@ -116,11 +143,18 @@ partial class MainForm
         menuAyuda = MI("❓ Ayuda", fgWhite);
         menuAcercaDe = MI("Acerca de...", fgWhite, MenuAcercaDe_Click!);
         menuAyuda.DropDownItems.Add(menuAcercaDe);
+
         menuStrip1.Items.AddRange(new ToolStripItem[] { menuArchivo, menuBaseDatos, menuAyuda });
         MainMenuStrip = menuStrip1;
 
         // ── ToolStrip ────────────────────────────────────────────
-        toolStrip1 = new ToolStrip { BackColor = bgLight, GripStyle = ToolStripGripStyle.Hidden, Padding = new Padding(6, 2, 0, 2) };
+        toolStrip1 = new ToolStrip
+        {
+            BackColor = bgLight,
+            GripStyle = ToolStripGripStyle.Hidden,
+            Padding = new Padding(6, 2, 0, 2)
+        };
+
         tsBtnCargarTodo = TSB("⬇  Cargar Todo", fgYellow, BtnCargarTodo_Click!);
         tsSep1 = new ToolStripSeparator();
         tsBtnJson = TSB("JSON", Color.LightGreen, BtnCargarJson_Click!);
@@ -133,21 +167,71 @@ partial class MainForm
         tsSep3 = new ToolStripSeparator();
         tsBtnRefresh = TSB("🔄 Actualizar BD", Color.FromArgb(0, 220, 180), BtnRefresh_Click!);
         tsBtnRefresh.ToolTipText = "Vuelve a descargar los datos de las bases de datos conectadas";
-        toolStrip1.Items.AddRange(new ToolStripItem[] {
+
+        // Separador y botones de exportar
+        tsSep4 = new ToolStripSeparator();
+        tsLblExport = new ToolStripLabel("Exportar:")
+        {
+            ForeColor = fgGreen,
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
+        };
+        tsBtnExportCsv = TSB("📄 CSV", Color.LightGreen, BtnExportarCsv_Click!);
+        tsBtnExportJson = TSB("{ } JSON", Color.LightSkyBlue, BtnExportarJson_Click!);
+        tsBtnExportXml = TSB("📋 XML", Color.Yellow, BtnExportarXml_Click!);
+        tsBtnExportTxt = TSB("📝 TXT", Color.Violet, BtnExportarTxt_Click!);
+
+        tsBtnExportCsv.ToolTipText = "Exportar datos visibles a CSV";
+        tsBtnExportJson.ToolTipText = "Exportar datos visibles a JSON";
+        tsBtnExportXml.ToolTipText = "Exportar datos visibles a XML";
+        tsBtnExportTxt.ToolTipText = "Exportar datos visibles a TXT (pipe-separated)";
+
+        toolStrip1.Items.AddRange(new ToolStripItem[]
+        {
             tsBtnCargarTodo, tsSep1,
             tsBtnJson, tsBtnCsv, tsBtnXml, tsBtnTxt, tsSep2,
-            tsBtnPostgres, tsBtnMariaDB, tsSep3, tsBtnRefresh });
+            tsBtnPostgres, tsBtnMariaDB, tsSep3, tsBtnRefresh,
+            tsSep4, tsLblExport,
+            tsBtnExportCsv, tsBtnExportJson, tsBtnExportXml, tsBtnExportTxt
+        });
 
         // ── StatusStrip ──────────────────────────────────────────
         statusStrip1 = new StatusStrip { BackColor = bgLight };
-        lblStatus = new ToolStripStatusLabel("Listo.") { ForeColor = Color.LightGray, Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+        lblStatus = new ToolStripStatusLabel("Listo.")
+        {
+            ForeColor = Color.LightGray,
+            Spring = true,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
         statusStrip1.Items.Add(lblStatus);
 
         // ── SplitContainer principal ─────────────────────────────
-        splitMain = new SplitContainer { Dock = DockStyle.Fill, Panel1MinSize = 140, FixedPanel = FixedPanel.Panel1, BackColor = bgDark };
+        splitMain = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Panel1MinSize = 140,
+            FixedPanel = FixedPanel.Panel1,
+            BackColor = bgDark
+        };
 
-        grpFuentes = new GroupBox { Text = "Fuentes cargadas", Dock = DockStyle.Fill, ForeColor = fgCyan, BackColor = bgPanel, Font = new Font("Segoe UI", 9f, FontStyle.Bold), Padding = new Padding(6) };
-        clbFuentes = new CheckedListBox { Dock = DockStyle.Fill, BackColor = bgPanel, ForeColor = fgWhite, BorderStyle = BorderStyle.None, CheckOnClick = true, Font = new Font("Consolas", 9f), ItemHeight = 22 };
+        grpFuentes = new GroupBox
+        {
+            Text = "Fuentes cargadas",
+            Dock = DockStyle.Fill,
+            ForeColor = fgCyan,
+            BackColor = bgPanel,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            Padding = new Padding(6)
+        };
+        clbFuentes = new CheckedListBox
+        {
+            Dock = DockStyle.Fill,
+            BackColor = bgPanel,
+            ForeColor = fgWhite,
+            BorderStyle = BorderStyle.None,
+            CheckOnClick = true,
+            Font = new Font("Consolas", 9f),
+            ItemHeight = 22
+        };
         clbFuentes.ItemCheck += ClbFuentes_ItemCheck!;
         grpFuentes.Controls.Add(clbFuentes);
         splitMain.Panel1.Controls.Add(grpFuentes);
@@ -167,20 +251,41 @@ partial class MainForm
         // ════════════════════════════════════════════════════════
         //  TAB 1 – Todos los datos
         // ════════════════════════════════════════════════════════
-        pnlToolsTodos = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = bgLight, Padding = new Padding(8, 8, 8, 0) };
+        pnlToolsTodos = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 46,
+            BackColor = bgLight,
+            Padding = new Padding(8, 8, 8, 0)
+        };
 
         lblBuscar = Lbl("Buscar:", new Point(8, 15), fgCyan);
-        cmbCampoBusqueda = Cmb(new Point(68, 11), 105, bgDark, fgWhite, new object[] { "nombre", "categoria", "fuente", "id", "valor" }, 0);
+        cmbCampoBusqueda = Cmb(new Point(68, 11), 105, bgDark, fgWhite,
+            new object[] { "nombre", "categoria", "fuente", "id", "valor" }, 0);
         txtBusqueda = Txt(new Point(182, 12), 190, bgDark, fgWhite);
         btnFiltrar = Btn("🔍 Filtrar", new Point(382, 11), 90, accentBlue, BtnFiltrar_Click!);
         btnLimpiarFiltro = Btn("✖ Limpiar", new Point(480, 11), 80, Color.FromArgb(90, 35, 35), BtnLimpiarFiltro_Click!);
         lblOrdenar = Lbl("Ordenar:", new Point(578, 15), fgCyan);
-        cmbCampoOrden = Cmb(new Point(645, 11), 105, bgDark, fgWhite, new object[] { "valor", "nombre", "categoria", "fecha", "id" }, 0);
+        cmbCampoOrden = Cmb(new Point(645, 11), 105, bgDark, fgWhite,
+            new object[] { "valor", "nombre", "categoria", "fecha", "id" }, 0);
         rbAscendente = Rb("↑ Asc", new Point(760, 8), true, bgLight);
         rbDescendente = Rb("↓ Desc", new Point(760, 26), false, bgLight);
         btnOrdenar = Btn("Ordenar", new Point(830, 11), 85, Color.FromArgb(30, 75, 30), BtnOrdenar_Click!);
-        lblContadorTodos = new Label { Text = "0 registros", AutoSize = true, Location = new Point(930, 15), ForeColor = fgYellow, Font = new Font("Segoe UI", 9f, FontStyle.Bold) };
-        pnlToolsTodos.Controls.AddRange(new Control[] { lblBuscar, cmbCampoBusqueda, txtBusqueda, btnFiltrar, btnLimpiarFiltro, lblOrdenar, cmbCampoOrden, rbAscendente, rbDescendente, btnOrdenar, lblContadorTodos });
+        lblContadorTodos = new Label
+        {
+            Text = "0 registros",
+            AutoSize = true,
+            Location = new Point(930, 15),
+            ForeColor = fgYellow,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+        };
+        pnlToolsTodos.Controls.AddRange(new Control[]
+        {
+            lblBuscar, cmbCampoBusqueda, txtBusqueda,
+            btnFiltrar, btnLimpiarFiltro,
+            lblOrdenar, cmbCampoOrden, rbAscendente, rbDescendente,
+            btnOrdenar, lblContadorTodos
+        });
 
         dgvTodos = new DataGridView { Dock = DockStyle.Fill };
         tabTodos.Controls.Add(dgvTodos);
@@ -189,15 +294,47 @@ partial class MainForm
         // ════════════════════════════════════════════════════════
         //  TAB 2 – Por categoría
         // ════════════════════════════════════════════════════════
-        splitCategoria = new SplitContainer { Dock = DockStyle.Fill, Panel1MinSize = 160, FixedPanel = FixedPanel.Panel1, BackColor = bgMid };
+        splitCategoria = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Panel1MinSize = 160,
+            FixedPanel = FixedPanel.Panel1,
+            BackColor = bgMid
+        };
 
-        var lblCatTitulo = new Label { Text = "  Categorías", Dock = DockStyle.Top, Height = 30, TextAlign = ContentAlignment.MiddleLeft, ForeColor = fgCyan, BackColor = bgLight, Font = new Font("Segoe UI", 10f, FontStyle.Bold) };
-        lstCategorias = new ListBox { Dock = DockStyle.Fill, BackColor = bgPanel, ForeColor = fgWhite, BorderStyle = BorderStyle.None, Font = new Font("Segoe UI", 9.5f), ItemHeight = 24 };
+        var lblCatTitulo = new Label
+        {
+            Text = "  Categorías",
+            Dock = DockStyle.Top,
+            Height = 30,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = fgCyan,
+            BackColor = bgLight,
+            Font = new Font("Segoe UI", 10f, FontStyle.Bold)
+        };
+        lstCategorias = new ListBox
+        {
+            Dock = DockStyle.Fill,
+            BackColor = bgPanel,
+            ForeColor = fgWhite,
+            BorderStyle = BorderStyle.None,
+            Font = new Font("Segoe UI", 9.5f),
+            ItemHeight = 24
+        };
         lstCategorias.SelectedIndexChanged += LstCategorias_SelectedIndexChanged!;
         splitCategoria.Panel1.Controls.AddRange(new Control[] { lstCategorias, lblCatTitulo });
         splitCategoria.Panel1.BackColor = bgPanel;
 
-        lblCatInfo = new Label { Dock = DockStyle.Top, Height = 30, TextAlign = ContentAlignment.MiddleLeft, ForeColor = fgYellow, BackColor = bgLight, Padding = new Padding(8, 0, 0, 0), Font = new Font("Segoe UI", 9f) };
+        lblCatInfo = new Label
+        {
+            Dock = DockStyle.Top,
+            Height = 30,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = fgYellow,
+            BackColor = bgLight,
+            Padding = new Padding(8, 0, 0, 0),
+            Font = new Font("Segoe UI", 9f)
+        };
         dgvCategoria = new DataGridView { Dock = DockStyle.Fill };
         splitCategoria.Panel2.Controls.AddRange(new Control[] { dgvCategoria, lblCatInfo });
         splitCategoria.Panel2.BackColor = bgMid;
@@ -217,12 +354,13 @@ partial class MainForm
         tabEstadisticas.Controls.Add(pnlStatsTop);
 
         // ════════════════════════════════════════════════════════
-        //  TAB 4 – Gráficas con combos inteligentes
+        //  TAB 4 – Gráficas
         // ════════════════════════════════════════════════════════
         pnlGraficasTop = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = bgLight, Padding = new Padding(10, 8, 0, 0) };
 
         lblTipoGrafica = Lbl("Tipo:", new Point(8, 15), fgCyan);
-        cmbTipoGrafica = Cmb(new Point(50, 11), 105, bgDark, fgWhite, new object[] { "Columnas", "Barras", "Pastel" }, 0);
+        cmbTipoGrafica = Cmb(new Point(50, 11), 105, bgDark, fgWhite,
+            new object[] { "Columnas", "Barras", "Pastel" }, 0);
         cmbTipoGrafica.SelectedIndexChanged += CmbTipoGrafica_SelectedIndexChanged!;
 
         btnActualizarGrafica = Btn("🔄", new Point(164, 11), 34, accentBlue, BtnActualizarGrafica_Click!);
@@ -251,7 +389,8 @@ partial class MainForm
         };
         cmbMetricaGrafica.SelectedIndexChanged += CmbMetricaGrafica_SelectedIndexChanged!;
 
-        pnlGraficasTop.Controls.AddRange(new Control[] {
+        pnlGraficasTop.Controls.AddRange(new Control[]
+        {
             lblTipoGrafica, cmbTipoGrafica, btnActualizarGrafica,
             lblGrupoGrafica, cmbGrupoGrafica,
             lblMetricaGrafica, cmbMetricaGrafica
@@ -286,7 +425,12 @@ partial class MainForm
         btnLinqGroupBy = Btn(".GroupBy()", new Point(679, 16), 88, Color.FromArgb(30, 75, 30), BtnLinqGroupBy_Click!);
         btnLinqOrderBy = Btn(".OrderBy()", new Point(773, 16), 88, Color.FromArgb(55, 35, 85), BtnLinqOrderBy_Click!);
         btnLinqLimpiar = Btn("✖ Limpiar", new Point(867, 16), 78, Color.FromArgb(70, 25, 25), BtnLinqLimpiar_Click!);
-        filaLinq.Controls.AddRange(new Control[] { lblLinqTitulo, lblCampoLinq, cmbLinqCampo, lblBuscarLinq, txtLinqFiltro, btnLinqWhere, btnLinqGroupBy, btnLinqOrderBy, btnLinqLimpiar });
+        filaLinq.Controls.AddRange(new Control[]
+        {
+            lblLinqTitulo, lblCampoLinq, cmbLinqCampo,
+            lblBuscarLinq, txtLinqFiltro,
+            btnLinqWhere, btnLinqGroupBy, btnLinqOrderBy, btnLinqLimpiar
+        });
 
         var filaBot = new Panel { Location = new Point(0, 108), Size = new Size(4000, 4), BackColor = Color.FromArgb(0, 160, 180) };
         pnlProcHeader.Controls.AddRange(new Control[] { filaDuplicados, filaSep, filaLinq, filaBot });
@@ -305,34 +449,58 @@ partial class MainForm
     }
 
     // ── Helpers de construcción ───────────────────────────────────
-    private static Label Lbl(string text, Point loc, Color fore)
-        => new() { Text = text, Location = loc, AutoSize = true, ForeColor = fore };
+    private static Label Lbl(string text, Point loc, Color fore) =>
+        new() { Text = text, Location = loc, AutoSize = true, ForeColor = fore };
 
     private static Button Btn(string text, Point loc, int width, Color bg, EventHandler click)
     {
-        var b = new Button { Text = text, Location = loc, Width = width, Height = 26, BackColor = bg, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8.5f) };
+        var b = new Button
+        {
+            Text = text,
+            Location = loc,
+            Width = width,
+            Height = 26,
+            BackColor = bg,
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 8.5f)
+        };
         b.FlatAppearance.BorderSize = 0;
         b.Click += click;
         return b;
     }
 
-    private static RadioButton Rb(string text, Point loc, bool chk, Color bg)
-        => new() { Text = text, Location = loc, AutoSize = true, Checked = chk, ForeColor = Color.White, BackColor = bg };
+    private static RadioButton Rb(string text, Point loc, bool chk, Color bg) =>
+        new() { Text = text, Location = loc, AutoSize = true, Checked = chk, ForeColor = Color.White, BackColor = bg };
 
     private static ComboBox Cmb(Point loc, int width, Color bg, Color fg, object[] items, int sel)
     {
-        var c = new ComboBox { Location = loc, Width = width, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = bg, ForeColor = fg, FlatStyle = FlatStyle.Flat };
+        var c = new ComboBox
+        {
+            Location = loc,
+            Width = width,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            BackColor = bg,
+            ForeColor = fg,
+            FlatStyle = FlatStyle.Flat
+        };
         c.Items.AddRange(items);
         if (sel >= 0 && items.Length > sel) c.SelectedIndex = sel;
         return c;
     }
 
-    private static TextBox Txt(Point loc, int width, Color bg, Color fg)
-        => new() { Location = loc, Width = width, BackColor = bg, ForeColor = fg, BorderStyle = BorderStyle.FixedSingle };
+    private static TextBox Txt(Point loc, int width, Color bg, Color fg) =>
+        new() { Location = loc, Width = width, BackColor = bg, ForeColor = fg, BorderStyle = BorderStyle.FixedSingle };
 
     private static ToolStripButton TSB(string text, Color fore, EventHandler click)
     {
-        var b = new ToolStripButton(text) { ForeColor = fore, BackColor = Color.Transparent, DisplayStyle = ToolStripItemDisplayStyle.Text, Font = new Font("Segoe UI", 9f) };
+        var b = new ToolStripButton(text)
+        {
+            ForeColor = fore,
+            BackColor = Color.Transparent,
+            DisplayStyle = ToolStripItemDisplayStyle.Text,
+            Font = new Font("Segoe UI", 9f)
+        };
         b.Click += click;
         return b;
     }
