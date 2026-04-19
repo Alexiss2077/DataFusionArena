@@ -407,15 +407,15 @@ public partial class MainForm : Form
             return;
         }
 
-        var columnas = _infoColumnas.Select(c => c.Display).ToList();
-        var mapeo = _infoColumnas.ToDictionary(c => c.Display, c => c.Clave, StringComparer.OrdinalIgnoreCase);
+        // Snapshot de _infoColumnas en el momento del click
+        // Es la misma fuente que usa el DataGridView y los exportadores de archivo,
+        // así que la tabla en BD tendrá exactamente las mismas columnas que se ven en pantalla.
+        var infoColumnas = new List<(string Display, string Clave)>(_infoColumnas);
 
         using var dlg = new FormExportarBD(datos.Count);
         if (dlg.ShowDialog() != DialogResult.OK) return;
 
         ActualizarEstadoBarra($"⏳ Enviando {datos.Count} registros a {dlg.Motor}...");
-
-        // Deshabilitar botón durante el proceso
         tsBtnExportarBD.Enabled = false;
 
         var progreso = new Progress<int>(pct =>
@@ -429,12 +429,12 @@ public partial class MainForm : Form
             if (dlg.Motor == "PostgreSQL")
             {
                 result = await DatabaseWriter.EscribirEnPostgreSQLAsync(
-                    dlg.CadenaConexion, dlg.NombreTabla, snapshot, columnas, mapeo, progreso);
+                    dlg.CadenaConexion, dlg.NombreTabla, snapshot, infoColumnas, progreso);
             }
             else
             {
                 result = await DatabaseWriter.EscribirEnMariaDBAsync(
-                    dlg.CadenaConexion, dlg.NombreTabla, snapshot, columnas, mapeo, progreso);
+                    dlg.CadenaConexion, dlg.NombreTabla, snapshot, infoColumnas, progreso);
             }
 
             ActualizarEstadoBarra(result.Mensaje);
@@ -442,6 +442,7 @@ public partial class MainForm : Form
                 $"{result.Mensaje}\n\n" +
                 $"Motor:      {dlg.Motor}\n" +
                 $"Tabla:      {dlg.NombreTabla}\n" +
+                $"Columnas:   {infoColumnas.Count}\n" +
                 $"Insertados: {result.Insertados:N0}\n" +
                 $"Errores:    {result.Errores}",
                 "Exportar a Base de Datos",

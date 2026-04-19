@@ -180,7 +180,7 @@ partial class MainForm
 
         // ⭐ Botón exportar a BD
         tsSep5 = new ToolStripSeparator();
-        tsLblExportBD = new ToolStripLabel("→ BD:")
+        tsLblExportBD = new ToolStripLabel("BD:")
         {
             ForeColor = fgOrange,
             Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)

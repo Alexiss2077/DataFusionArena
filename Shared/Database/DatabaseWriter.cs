@@ -6,8 +6,11 @@ using System.Globalization;
 namespace DataFusionArena.Shared.Database;
 
 /// <summary>
-/// Escribe registros DataItem en PostgreSQL o MariaDB.
-/// Crea la tabla automáticamente si no existe.
+/// Escribe registros DataItem en PostgreSQL o MariaDB exportando exactamente
+/// las mismas columnas que aparecen en el dataset cargado (sin columnas fijas).
+/// La lista de columnas y su mapeo se recibe desde MainForm._infoColumnas,
+/// igual que hace FileExportService, para que la tabla en BD sea idéntica
+/// a lo que se ve en pantalla y a lo que se exportaría a CSV/JSON/XML/TXT.
 /// </summary>
 public static class DatabaseWriter
 {
@@ -19,8 +22,7 @@ public static class DatabaseWriter
         string cadenaConexion,
         string tabla,
         List<DataItem> datos,
-        List<string> columnas,
-        Dictionary<string, string> mapeo,
+        List<(string Display, string Clave)> infoColumnas,
         IProgress<int>? progreso = null)
     {
         var result = new WriteResult();
@@ -29,17 +31,11 @@ public static class DatabaseWriter
             using var conn = new NpgsqlConnection(cadenaConexion);
             conn.Open();
 
-            // Determinar columnas extras únicas del dataset
-            var extraKeys = datos
-                .SelectMany(d => d.CamposExtra.Keys)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(k => k)
-                .ToList();
+            // Construir lista de columnas definitiva (sin duplicados, en orden original)
+            var columnas = BuildColumnasSanitizadas(infoColumnas);
 
-            // Crear tabla si no existe
-            CrearTablaPostgreSQL(conn, tabla, extraKeys);
+            CrearTablaPostgreSQL(conn, tabla, columnas);
 
-            // Insertar por lotes
             int total = datos.Count;
             int insertados = 0;
             int errores = 0;
@@ -51,14 +47,15 @@ public static class DatabaseWriter
                 {
                     try
                     {
-                        InsertarItemPostgreSQL(conn, tx, tabla, item, extraKeys);
+                        InsertarItemPostgreSQL(conn, tx, tabla, item, columnas, infoColumnas);
                         insertados++;
                         if (insertados % 100 == 0)
                             progreso?.Report((int)(insertados * 100.0 / total));
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         errores++;
+                        Console.WriteLine($"[PG Writer] Error fila {insertados + errores}: {ex.Message}");
                     }
                 }
                 tx.Commit();
@@ -87,31 +84,30 @@ public static class DatabaseWriter
         string cadenaConexion,
         string tabla,
         List<DataItem> datos,
-        List<string> columnas,
-        Dictionary<string, string> mapeo,
+        List<(string Display, string Clave)> infoColumnas,
         IProgress<int>? progreso = null)
     {
         return await Task.Run(() =>
-            EscribirEnPostgreSQL(cadenaConexion, tabla, datos, columnas, mapeo, progreso));
+            EscribirEnPostgreSQL(cadenaConexion, tabla, datos, infoColumnas, progreso));
     }
 
-    private static void CrearTablaPostgreSQL(NpgsqlConnection conn, string tabla, List<string> extraKeys)
+    private static void CrearTablaPostgreSQL(
+        NpgsqlConnection conn,
+        string tabla,
+        List<(string NombreDB, string Clave, string Display)> columnas)
     {
-        // Construir columnas extras como TEXT
-        string extraCols = extraKeys.Count > 0
-            ? ",\n    " + string.Join(",\n    ", extraKeys.Select(k =>
-                $"\"{SanitizarNombre(k)}\" TEXT"))
-            : "";
+        // Determinar tipo SQL por clave semántica
+        string TipoSQL(string clave) => clave switch
+        {
+            "id" => "INTEGER",
+            "valor" => "DOUBLE PRECISION",
+            "fecha" => "TEXT",   // TEXT es seguro para fechas de formato variable
+            _ => "TEXT"
+        };
 
-        string sql = $@"
-CREATE TABLE IF NOT EXISTS ""{tabla}"" (
-    id INTEGER,
-    nombre TEXT,
-    categoria TEXT,
-    valor DOUBLE PRECISION,
-    fecha DATE,
-    fuente TEXT{extraCols}
-);";
+        var defs = columnas.Select(c => $"    \"{c.NombreDB}\" {TipoSQL(c.Clave)}");
+        string sql = $"CREATE TABLE IF NOT EXISTS \"{tabla}\" (\n{string.Join(",\n", defs)}\n);";
+
         using var cmd = new NpgsqlCommand(sql, conn);
         cmd.ExecuteNonQuery();
     }
@@ -121,33 +117,33 @@ CREATE TABLE IF NOT EXISTS ""{tabla}"" (
         NpgsqlTransaction tx,
         string tabla,
         DataItem item,
-        List<string> extraKeys)
+        List<(string NombreDB, string Clave, string Display)> columnas,
+        List<(string Display, string Clave)> infoColumnas)
     {
-        var colNames = new List<string> { "id", "nombre", "categoria", "valor", "fecha", "fuente" };
-        var paramNames = new List<string> { "@id", "@nombre", "@categoria", "@valor", "@fecha", "@fuente" };
+        var colNames = columnas.Select(c => $"\"{c.NombreDB}\"").ToList();
+        var paramNames = columnas.Select((c, i) => $"@p{i}").ToList();
 
-        foreach (var k in extraKeys)
-        {
-            colNames.Add($"\"{SanitizarNombre(k)}\"");
-            paramNames.Add("@extra_" + SanitizarNombre(k));
-        }
-
-        string sql = $@"INSERT INTO ""{tabla}"" ({string.Join(", ", colNames)})
-VALUES ({string.Join(", ", paramNames)})
-ON CONFLICT DO NOTHING;";
+        string sql = $"INSERT INTO \"{tabla}\" ({string.Join(", ", colNames)}) " +
+                     $"VALUES ({string.Join(", ", paramNames)});";
 
         using var cmd = new NpgsqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("@id", item.Id);
-        cmd.Parameters.AddWithValue("@nombre", item.Nombre ?? "");
-        cmd.Parameters.AddWithValue("@categoria", item.Categoria ?? "");
-        cmd.Parameters.AddWithValue("@valor", item.Valor);
-        cmd.Parameters.AddWithValue("@fecha", NpgsqlTypes.NpgsqlDbType.Date, item.Fecha.Date);
-        cmd.Parameters.AddWithValue("@fuente", item.Fuente ?? "");
 
-        foreach (var k in extraKeys)
+        for (int i = 0; i < columnas.Count; i++)
         {
-            string val = item.CamposExtra.TryGetValue(k, out var v) ? v ?? "" : "";
-            cmd.Parameters.AddWithValue("@extra_" + SanitizarNombre(k), val);
+            var (_, clave, display) = columnas[i];
+            string rawVal = ObtenerValorExport(item, display, clave);
+
+            // Intentar parsear numérico/fecha para los tipos correctos
+            object dbVal;
+            if (clave == "id" && int.TryParse(rawVal, out int idV))
+                dbVal = idV;
+            else if (clave == "valor" && double.TryParse(rawVal,
+                NumberStyles.Any, CultureInfo.InvariantCulture, out double dblV))
+                dbVal = dblV;
+            else
+                dbVal = rawVal;
+
+            cmd.Parameters.AddWithValue($"@p{i}", dbVal);
         }
 
         cmd.ExecuteNonQuery();
@@ -161,8 +157,7 @@ ON CONFLICT DO NOTHING;";
         string cadenaConexion,
         string tabla,
         List<DataItem> datos,
-        List<string> columnas,
-        Dictionary<string, string> mapeo,
+        List<(string Display, string Clave)> infoColumnas,
         IProgress<int>? progreso = null)
     {
         var result = new WriteResult();
@@ -171,13 +166,9 @@ ON CONFLICT DO NOTHING;";
             using var conn = new MySqlConnection(cadenaConexion);
             conn.Open();
 
-            var extraKeys = datos
-                .SelectMany(d => d.CamposExtra.Keys)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(k => k)
-                .ToList();
+            var columnas = BuildColumnasSanitizadas(infoColumnas);
 
-            CrearTablaMariaDB(conn, tabla, extraKeys);
+            CrearTablaMariaDB(conn, tabla, columnas);
 
             int total = datos.Count;
             int insertados = 0;
@@ -190,14 +181,15 @@ ON CONFLICT DO NOTHING;";
                 {
                     try
                     {
-                        InsertarItemMariaDB(conn, tx, tabla, item, extraKeys);
+                        InsertarItemMariaDB(conn, tx, tabla, item, columnas, infoColumnas);
                         insertados++;
                         if (insertados % 100 == 0)
                             progreso?.Report((int)(insertados * 100.0 / total));
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         errores++;
+                        Console.WriteLine($"[MD Writer] Error fila {insertados + errores}: {ex.Message}");
                     }
                 }
                 tx.Commit();
@@ -226,30 +218,28 @@ ON CONFLICT DO NOTHING;";
         string cadenaConexion,
         string tabla,
         List<DataItem> datos,
-        List<string> columnas,
-        Dictionary<string, string> mapeo,
+        List<(string Display, string Clave)> infoColumnas,
         IProgress<int>? progreso = null)
     {
         return await Task.Run(() =>
-            EscribirEnMariaDB(cadenaConexion, tabla, datos, columnas, mapeo, progreso));
+            EscribirEnMariaDB(cadenaConexion, tabla, datos, infoColumnas, progreso));
     }
 
-    private static void CrearTablaMariaDB(MySqlConnection conn, string tabla, List<string> extraKeys)
+    private static void CrearTablaMariaDB(
+        MySqlConnection conn,
+        string tabla,
+        List<(string NombreDB, string Clave, string Display)> columnas)
     {
-        string extraCols = extraKeys.Count > 0
-            ? ",\n    " + string.Join(",\n    ", extraKeys.Select(k =>
-                $"`{SanitizarNombre(k)}` TEXT"))
-            : "";
+        string TipoSQL(string clave) => clave switch
+        {
+            "id" => "INT",
+            "valor" => "DOUBLE",
+            _ => "TEXT"
+        };
 
-        string sql = $@"
-CREATE TABLE IF NOT EXISTS `{tabla}` (
-    `id` INT,
-    `nombre` TEXT,
-    `categoria` TEXT,
-    `valor` DOUBLE,
-    `fecha` DATE,
-    `fuente` VARCHAR(50){extraCols}
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
+        var defs = columnas.Select(c => $"    `{c.NombreDB}` {TipoSQL(c.Clave)}");
+        string sql = $"CREATE TABLE IF NOT EXISTS `{tabla}` (\n{string.Join(",\n", defs)}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
+
         using var cmd = new MySqlCommand(sql, conn);
         cmd.ExecuteNonQuery();
     }
@@ -259,32 +249,32 @@ CREATE TABLE IF NOT EXISTS `{tabla}` (
         MySqlTransaction tx,
         string tabla,
         DataItem item,
-        List<string> extraKeys)
+        List<(string NombreDB, string Clave, string Display)> columnas,
+        List<(string Display, string Clave)> infoColumnas)
     {
-        var colNames = new List<string> { "`id`", "`nombre`", "`categoria`", "`valor`", "`fecha`", "`fuente`" };
-        var paramNames = new List<string> { "@id", "@nombre", "@categoria", "@valor", "@fecha", "@fuente" };
+        var colNames = columnas.Select(c => $"`{c.NombreDB}`").ToList();
+        var paramNames = columnas.Select((c, i) => $"@p{i}").ToList();
 
-        foreach (var k in extraKeys)
-        {
-            colNames.Add($"`{SanitizarNombre(k)}`");
-            paramNames.Add("@extra_" + SanitizarNombre(k));
-        }
-
-        string sql = $@"INSERT IGNORE INTO `{tabla}` ({string.Join(", ", colNames)})
-VALUES ({string.Join(", ", paramNames)});";
+        string sql = $"INSERT INTO `{tabla}` ({string.Join(", ", colNames)}) " +
+                     $"VALUES ({string.Join(", ", paramNames)});";
 
         using var cmd = new MySqlCommand(sql, conn, tx);
-        cmd.Parameters.AddWithValue("@id", item.Id);
-        cmd.Parameters.AddWithValue("@nombre", item.Nombre ?? "");
-        cmd.Parameters.AddWithValue("@categoria", item.Categoria ?? "");
-        cmd.Parameters.AddWithValue("@valor", item.Valor);
-        cmd.Parameters.AddWithValue("@fecha", item.Fecha.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-        cmd.Parameters.AddWithValue("@fuente", item.Fuente ?? "");
 
-        foreach (var k in extraKeys)
+        for (int i = 0; i < columnas.Count; i++)
         {
-            string val = item.CamposExtra.TryGetValue(k, out var v) ? v ?? "" : "";
-            cmd.Parameters.AddWithValue("@extra_" + SanitizarNombre(k), val);
+            var (_, clave, display) = columnas[i];
+            string rawVal = ObtenerValorExport(item, display, clave);
+
+            object dbVal;
+            if (clave == "id" && int.TryParse(rawVal, out int idV))
+                dbVal = idV;
+            else if (clave == "valor" && double.TryParse(rawVal,
+                NumberStyles.Any, CultureInfo.InvariantCulture, out double dblV))
+                dbVal = dblV;
+            else
+                dbVal = rawVal;
+
+            cmd.Parameters.AddWithValue($"@p{i}", dbVal);
         }
 
         cmd.ExecuteNonQuery();
@@ -323,9 +313,9 @@ VALUES ({string.Join(", ", paramNames)});";
             using var conn = new MySqlConnection(cadenaConexion);
             conn.Open();
             using var cmd = new MySqlCommand(
-                $"SELECT table_name FROM information_schema.tables " +
-                $"WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' " +
-                $"ORDER BY table_name;", conn);
+                "SELECT table_name FROM information_schema.tables " +
+                "WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' " +
+                "ORDER BY table_name;", conn);
             using var r = cmd.ExecuteReader();
             while (r.Read()) tablas.Add(r.GetString(0));
         }
@@ -337,15 +327,72 @@ VALUES ({string.Join(", ", paramNames)});";
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  HELPERS
+    //  HELPERS COMPARTIDOS
     // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Convierte _infoColumnas en la lista definitiva de columnas para la BD.
+    /// - Usa el Display como nombre de columna en BD (sanitizado).
+    /// - Elimina duplicados por nombre sanitizado (el primero gana).
+    /// Esto garantiza que la tabla en BD tenga exactamente las mismas columnas
+    /// que se ven en el DataGridView y que se exportarían a CSV/JSON/etc.
+    /// </summary>
+    private static List<(string NombreDB, string Clave, string Display)> BuildColumnasSanitizadas(
+        List<(string Display, string Clave)> infoColumnas)
+    {
+        var resultado = new List<(string NombreDB, string Clave, string Display)>();
+        var yaAgregados = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (display, clave) in infoColumnas)
+        {
+            string nombreDB = SanitizarNombre(display);
+            if (string.IsNullOrEmpty(nombreDB)) continue;
+            // Si el nombre sanitizado ya existe, saltar (evita columna duplicada)
+            if (!yaAgregados.Add(nombreDB)) continue;
+            resultado.Add((nombreDB, clave, display));
+        }
+
+        return resultado;
+    }
+
+    /// <summary>
+    /// Obtiene el valor de una columna para un DataItem dado su Display y Clave.
+    /// Usa exactamente la misma lógica que FileExportService.GetValorExport,
+    /// buscando primero en CamposExtra (valor RAW original del archivo)
+    /// y haciendo fallback a las propiedades estándar de DataItem.
+    /// </summary>
+    private static string ObtenerValorExport(DataItem item, string display, string clave)
+    {
+        // 1. Buscar en CamposExtra por Display original (como lo guarda TxtDataReader)
+        if (item.CamposExtra.TryGetValue(display, out var v1) && v1 != null)
+            return v1;
+
+        // 2. Buscar en CamposExtra por Display en minúsculas
+        if (item.CamposExtra.TryGetValue(display.ToLowerInvariant(), out var v2) && v2 != null)
+            return v2;
+
+        // 3. Buscar en CamposExtra por Clave
+        if (item.CamposExtra.TryGetValue(clave, out var v3) && v3 != null)
+            return v3;
+
+        // 4. Fallback a propiedades estándar de DataItem
+        return clave switch
+        {
+            "id" => item.Id.ToString(),
+            "nombre" => item.Nombre ?? "",
+            "categoria" => item.Categoria ?? "",
+            "valor" => item.Valor.ToString(CultureInfo.InvariantCulture),
+            "fecha" => item.Fecha.ToString("yyyy-MM-dd"),
+            "fuente" => item.Fuente ?? "",
+            _ => ""
+        };
+    }
 
     private static string SanitizarNombre(string nombre)
     {
-        // Reemplazar caracteres no alfanuméricos por _
         var sb = new System.Text.StringBuilder();
         foreach (char c in nombre)
-            sb.Append(char.IsLetterOrDigit(c) ? c : '_');
+            sb.Append(char.IsLetterOrDigit(c) || c == '_' ? c : '_');
         string s = sb.ToString().Trim('_');
         if (s.Length == 0) return "campo";
         if (char.IsDigit(s[0])) s = "_" + s;
