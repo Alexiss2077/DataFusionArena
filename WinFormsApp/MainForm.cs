@@ -1,11 +1,11 @@
-using DataFusionArena.Shared.Models;
-using DataFusionArena.Shared.Readers;
 using DataFusionArena.Shared.Database;
+using DataFusionArena.Shared.Models;
 using DataFusionArena.Shared.Processing;
+using DataFusionArena.Shared.Readers;
 using DataFusionArena.Shared.Services;
 using System.Data;
-using System.Reflection;
 using System.Globalization;
+using System.Reflection;
 
 namespace DataFusionArena.WinForms;
 
@@ -393,7 +393,75 @@ public partial class MainForm : Form
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  EXPORTAR DATOS
+    //  EXPORTAR A BASE DE DATOS ⭐ NUEVO
+    // ══════════════════════════════════════════════════════════════
+
+    private async void BtnExportarBD_Click(object? sender, EventArgs e)
+    {
+        var datos = _datosBase.Count > 0 ? _datosBase : _datos;
+        if (datos.Count == 0)
+        {
+            MessageBox.Show(
+                "No hay datos en memoria para enviar.\nCarga un archivo primero (JSON, CSV, XML, TXT).",
+                "Sin datos", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var columnas = _infoColumnas.Select(c => c.Display).ToList();
+        var mapeo = _infoColumnas.ToDictionary(c => c.Display, c => c.Clave, StringComparer.OrdinalIgnoreCase);
+
+        using var dlg = new FormExportarBD(datos.Count);
+        if (dlg.ShowDialog() != DialogResult.OK) return;
+
+        ActualizarEstadoBarra($"⏳ Enviando {datos.Count} registros a {dlg.Motor}...");
+
+        // Deshabilitar botón durante el proceso
+        tsBtnExportarBD.Enabled = false;
+
+        var progreso = new Progress<int>(pct =>
+            ActualizarEstadoBarra($"⏳ Enviando a BD... {pct}%"));
+
+        try
+        {
+            WriteResult result;
+            var snapshot = new List<DataItem>(datos);
+
+            if (dlg.Motor == "PostgreSQL")
+            {
+                result = await DatabaseWriter.EscribirEnPostgreSQLAsync(
+                    dlg.CadenaConexion, dlg.NombreTabla, snapshot, columnas, mapeo, progreso);
+            }
+            else
+            {
+                result = await DatabaseWriter.EscribirEnMariaDBAsync(
+                    dlg.CadenaConexion, dlg.NombreTabla, snapshot, columnas, mapeo, progreso);
+            }
+
+            ActualizarEstadoBarra(result.Mensaje);
+            MessageBox.Show(
+                $"{result.Mensaje}\n\n" +
+                $"Motor:      {dlg.Motor}\n" +
+                $"Tabla:      {dlg.NombreTabla}\n" +
+                $"Insertados: {result.Insertados:N0}\n" +
+                $"Errores:    {result.Errores}",
+                "Exportar a Base de Datos",
+                MessageBoxButtons.OK,
+                result.Exito ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        }
+        catch (Exception ex)
+        {
+            ActualizarEstadoBarra($"❌ Error al exportar a BD: {ex.Message}");
+            MessageBox.Show($"Error inesperado:\n{ex.Message}",
+                "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            tsBtnExportarBD.Enabled = _datosBase.Count > 0 || _datos.Count > 0;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  EXPORTAR ARCHIVOS
     // ══════════════════════════════════════════════════════════════
 
     private void BtnExportarCsv_Click(object? sender, EventArgs e) => _ = ExportarAsync("csv");
@@ -431,14 +499,12 @@ public partial class MainForm : Form
 
         if (dlg.ShowDialog() != DialogResult.OK) return;
 
-        // Construir columnas y mapeo desde _infoColumnas actual
         var columnas = _infoColumnas.Select(c => c.Display).ToList();
         var mapeo = _infoColumnas.ToDictionary(
             c => c.Display, c => c.Clave, StringComparer.OrdinalIgnoreCase);
 
         ActualizarEstadoBarra($"💾 Exportando {datos.Count} registros a {formato.ToUpper()}...");
 
-        // Deshabilitar botones de exportar mientras se procesa
         tsBtnExportCsv.Enabled = false;
         tsBtnExportJson.Enabled = false;
         tsBtnExportXml.Enabled = false;
@@ -446,7 +512,7 @@ public partial class MainForm : Form
 
         try
         {
-            var snapshot = new List<DataItem>(datos); // copia segura para el thread
+            var snapshot = new List<DataItem>(datos);
             await Task.Run(() =>
             {
                 switch (formato)
@@ -488,7 +554,7 @@ public partial class MainForm : Form
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  CONEXIÓN BD
+    //  CONEXIÓN BD (LECTURA)
     // ══════════════════════════════════════════════════════════════
 
     private async void BtnConectarPostgres_Click(object sender, EventArgs e)
@@ -800,13 +866,14 @@ public partial class MainForm : Form
         await ActualizarTabEstadisticasAsync();
         ActualizarChart();
 
-        // Habilitar/deshabilitar botones de exportar
-        bool hayDatos = _datosBase.Count > 0;
+        bool hayDatos = _datosBase.Count > 0 || _datos.Count > 0;
         tsBtnExportCsv.Enabled = hayDatos;
         tsBtnExportJson.Enabled = hayDatos;
         tsBtnExportXml.Enabled = hayDatos;
         tsBtnExportTxt.Enabled = hayDatos;
+        tsBtnExportarBD.Enabled = hayDatos;   // ⭐ nuevo
         menuExportar.Enabled = hayDatos;
+        menuExportarBD.Enabled = hayDatos;     // ⭐ nuevo
 
         lblTotalRegistros.Text = $"Total registros: {_datos.Count}";
         lblTotalCategorias.Text = $"Categorías: {_porCategoria.Count}";
@@ -858,7 +925,9 @@ public partial class MainForm : Form
             tsBtnExportJson.Enabled = hayDatos;
             tsBtnExportXml.Enabled = hayDatos;
             tsBtnExportTxt.Enabled = hayDatos;
+            tsBtnExportarBD.Enabled = hayDatos;
             menuExportar.Enabled = hayDatos;
+            menuExportarBD.Enabled = hayDatos;
 
             ActualizarEstadoBarra($"Mostrando {_datosVista.Count} registros de: " +
                 string.Join(", ", clbFuentes.CheckedItems.Cast<string>()));
@@ -1045,12 +1114,13 @@ public partial class MainForm : Form
         }
         AplicarEstiloGrid(dgvEstadisticas);
 
-        // Botones exportar deshabilitados al inicio (no hay datos)
         tsBtnExportCsv.Enabled = false;
         tsBtnExportJson.Enabled = false;
         tsBtnExportXml.Enabled = false;
         tsBtnExportTxt.Enabled = false;
+        tsBtnExportarBD.Enabled = false;   // ⭐ nuevo
         menuExportar.Enabled = false;
+        menuExportarBD.Enabled = false;    // ⭐ nuevo
     }
 
     private static void AplicarEstiloGrid(DataGridView dgv)
@@ -1133,7 +1203,9 @@ public partial class MainForm : Form
         tsBtnExportJson.Enabled = false;
         tsBtnExportXml.Enabled = false;
         tsBtnExportTxt.Enabled = false;
+        tsBtnExportarBD.Enabled = false;
         menuExportar.Enabled = false;
+        menuExportarBD.Enabled = false;
 
         _infoColumnas.Clear();
         foreach (var col in _colsDefault) _infoColumnas.Add(col);
@@ -1146,7 +1218,7 @@ public partial class MainForm : Form
             "Data Fusion Arena\nAdministración y Organización de Datos\n\n" +
             "Ingeniería · 4.º Semestre · C# .NET 10 · WinForms\n\n" +
             "Fuentes: JSON · CSV · XML · TXT · PostgreSQL · MariaDB\n" +
-            "Exportar: CSV · JSON · XML · TXT\n" +
+            "Exportar: CSV · JSON · XML · TXT · PostgreSQL · MariaDB\n" +
             "Estructuras: List<T> · Dictionary<TKey,TValue>\n" +
             "Gráficas: GDI+ propio (sin dependencias externas)",
             "Acerca de", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1155,28 +1227,46 @@ public partial class MainForm : Form
 }
 
 // ══════════════════════════════════════════════════════════════
-//  DIÁLOGO 1 — Conexión BD
+//  DIÁLOGO – Conexión BD con detección automática de tablas ⭐
 // ══════════════════════════════════════════════════════════════
 public class FormConexionBD : Form
 {
     public string CadenaConexion { get; private set; } = "";
     public string NombreTabla { get; private set; } = "";
-    private readonly TextBox txtHost, txtPuerto, txtBD, txtUsuario, txtContrasena, txtTabla;
+
+    private readonly TextBox txtHost, txtPuerto, txtBD, txtUsuario, txtContrasena;
+    private readonly ComboBox cmbTabla;
+    private readonly Button btnDetectarTablas;
+    private readonly Label lblEstadoTablas;
+    private readonly bool _esPg;
+    private readonly string _pd, _ud;
 
     public FormConexionBD(string motor)
     {
-        Text = $"Conexión a {motor}"; Size = new Size(460, 340);
-        StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false;
-        BackColor = Color.FromArgb(30, 30, 45); ForeColor = Color.White;
-        bool esPg = motor == "PostgreSQL";
-        string pd = esPg ? "5432" : "3306", ud = esPg ? "postgres" : "root";
-        int y = 18, tx = 130, tw = 295;
+        _esPg = motor == "PostgreSQL";
+        _pd = _esPg ? "5432" : "3306";
+        _ud = _esPg ? "postgres" : "root";
 
-        Label Lbl(string t) => new() { Text = t, AutoSize = true, ForeColor = Color.FromArgb(0, 200, 220) };
+        Text = $"Conexión a {motor}";
+        Size = new Size(490, 420);
+        StartPosition = FormStartPosition.CenterParent;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        BackColor = Color.FromArgb(30, 30, 45);
+        ForeColor = Color.White;
+
+        int y = 18;
+        const int lx = 15, cx = 135, lw = 115, cw = 325;
+
+        Label Lbl(string t) => new()
+        {
+            Text = t,
+            AutoSize = true,
+            ForeColor = Color.FromArgb(0, 200, 220)
+        };
         TextBox Txt(string d, bool p = false) => new()
         {
-            Width = tw,
+            Width = cw,
             Text = d,
             BackColor = Color.FromArgb(45, 45, 65),
             ForeColor = Color.White,
@@ -1184,32 +1274,484 @@ public class FormConexionBD : Form
             UseSystemPasswordChar = p
         };
 
-        var l1 = Lbl("Host:"); l1.Location = new Point(15, y + 3); txtHost = Txt("localhost"); txtHost.Location = new Point(tx, y); y += 35;
-        var l2 = Lbl("Puerto:"); l2.Location = new Point(15, y + 3); txtPuerto = Txt(pd); txtPuerto.Location = new Point(tx, y); y += 35;
-        var l3 = Lbl("Base de datos:"); l3.Location = new Point(15, y + 3); txtBD = Txt(""); txtBD.Location = new Point(tx, y); y += 35;
-        var l4 = Lbl("Usuario:"); l4.Location = new Point(15, y + 3); txtUsuario = Txt(ud); txtUsuario.Location = new Point(tx, y); y += 35;
-        var l5 = Lbl("Contraseña:"); l5.Location = new Point(15, y + 3); txtContrasena = Txt("", true); txtContrasena.Location = new Point(tx, y); y += 35;
-        var l6 = Lbl("Tabla:"); l6.Location = new Point(15, y + 3); txtTabla = Txt(""); txtTabla.Location = new Point(tx, y); y += 45;
+        var l1 = Lbl("Host:"); l1.Location = new Point(lx, y + 3);
+        txtHost = Txt("localhost"); txtHost.Location = new Point(cx, y); y += 35;
 
-        var ok = new Button { Text = "Conectar", Location = new Point(260, y), Width = 80, DialogResult = DialogResult.OK, BackColor = Color.FromArgb(0, 120, 212), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-        var can = new Button { Text = "Cancelar", Location = new Point(355, y), Width = 80, DialogResult = DialogResult.Cancel, BackColor = Color.FromArgb(80, 30, 30), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+        var l2 = Lbl("Puerto:"); l2.Location = new Point(lx, y + 3);
+        txtPuerto = Txt(_pd); txtPuerto.Location = new Point(cx, y); y += 35;
 
-        ok.Click += (_, _) => {
+        var l3 = Lbl("Base de datos:"); l3.Location = new Point(lx, y + 3);
+        txtBD = Txt(""); txtBD.Location = new Point(cx, y); y += 35;
+
+        var l4 = Lbl("Usuario:"); l4.Location = new Point(lx, y + 3);
+        txtUsuario = Txt(_ud); txtUsuario.Location = new Point(cx, y); y += 35;
+
+        var l5 = Lbl("Contraseña:"); l5.Location = new Point(lx, y + 3);
+        txtContrasena = Txt("", true); txtContrasena.Location = new Point(cx, y); y += 35;
+
+        // ── Separador ──────────────────────────────────────────
+        var sep = new Label
+        {
+            Text = "",
+            Location = new Point(lx, y),
+            Size = new Size(445, 2),
+            BackColor = Color.FromArgb(0, 160, 180)
+        };
+        y += 10;
+
+        // ── Detectar tablas ────────────────────────────────────
+        var lTabla = Lbl("Tabla:"); lTabla.Location = new Point(lx, y + 6);
+
+        cmbTabla = new ComboBox
+        {
+            Location = new Point(cx, y + 2),
+            Width = 210,
+            DropDownStyle = ComboBoxStyle.DropDown,
+            BackColor = Color.FromArgb(45, 45, 65),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+
+        btnDetectarTablas = new Button
+        {
+            Text = "🔍 Detectar tablas",
+            Location = new Point(cx + 218, y),
+            Width = 107,
+            Height = 28,
+            BackColor = Color.FromArgb(0, 90, 150),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 8.5f)
+        };
+        btnDetectarTablas.FlatAppearance.BorderSize = 0;
+        btnDetectarTablas.Click += BtnDetectarTablas_Click!;
+        y += 38;
+
+        lblEstadoTablas = new Label
+        {
+            Text = "Ingresa los datos de conexión y pulsa 'Detectar tablas'.",
+            Location = new Point(cx, y),
+            Size = new Size(cw, 18),
+            ForeColor = Color.FromArgb(120, 180, 120),
+            Font = new Font("Segoe UI", 7.8f)
+        };
+        y += 30;
+
+        // ── Botones ───────────────────────────────────────────
+        var ok = new Button
+        {
+            Text = "✔ Conectar",
+            Location = new Point(270, y),
+            Width = 100,
+            Height = 28,
+            DialogResult = DialogResult.OK,
+            BackColor = Color.FromArgb(0, 120, 212),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+        ok.FlatAppearance.BorderSize = 0;
+
+        var can = new Button
+        {
+            Text = "Cancelar",
+            Location = new Point(378, y),
+            Width = 87,
+            Height = 28,
+            DialogResult = DialogResult.Cancel,
+            BackColor = Color.FromArgb(80, 30, 30),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+        can.FlatAppearance.BorderSize = 0;
+
+        ok.Click += (_, _) =>
+        {
             string h = string.IsNullOrWhiteSpace(txtHost.Text) ? "localhost" : txtHost.Text.Trim();
-            string p = string.IsNullOrWhiteSpace(txtPuerto.Text) ? pd : txtPuerto.Text.Trim();
-            string u = string.IsNullOrWhiteSpace(txtUsuario.Text) ? ud : txtUsuario.Text.Trim();
-            CadenaConexion = esPg
+            string p = string.IsNullOrWhiteSpace(txtPuerto.Text) ? _pd : txtPuerto.Text.Trim();
+            string u = string.IsNullOrWhiteSpace(txtUsuario.Text) ? _ud : txtUsuario.Text.Trim();
+            CadenaConexion = _esPg
                 ? $"Host={h};Port={p};Database={txtBD.Text.Trim()};Username={u};Password={txtContrasena.Text};"
                 : $"Server={h};Port={p};Database={txtBD.Text.Trim()};User={u};Password={txtContrasena.Text};";
-            NombreTabla = txtTabla.Text.Trim();
+            NombreTabla = cmbTabla.Text.Trim();
+            if (string.IsNullOrWhiteSpace(NombreTabla))
+            {
+                MessageBox.Show("Debes especificar el nombre de la tabla.",
+                    "Tabla requerida", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                DialogResult = DialogResult.None;
+            }
         };
-        Controls.AddRange(new Control[] { l1, txtHost, l2, txtPuerto, l3, txtBD, l4, txtUsuario, l5, txtContrasena, l6, txtTabla, ok, can });
-        AcceptButton = ok; CancelButton = can;
+
+        ClientSize = new Size(475, y + 55);
+        Controls.AddRange(new Control[]
+        {
+            l1, txtHost, l2, txtPuerto, l3, txtBD,
+            l4, txtUsuario, l5, txtContrasena,
+            sep, lTabla, cmbTabla, btnDetectarTablas, lblEstadoTablas,
+            ok, can
+        });
+        AcceptButton = ok;
+        CancelButton = can;
+    }
+
+    private async void BtnDetectarTablas_Click(object sender, EventArgs e)
+    {
+        string h = string.IsNullOrWhiteSpace(txtHost.Text) ? "localhost" : txtHost.Text.Trim();
+        string p = string.IsNullOrWhiteSpace(txtPuerto.Text) ? _pd : txtPuerto.Text.Trim();
+        string u = string.IsNullOrWhiteSpace(txtUsuario.Text) ? _ud : txtUsuario.Text.Trim();
+        string db = txtBD.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(db))
+        {
+            MessageBox.Show("Escribe el nombre de la base de datos primero.",
+                "Base de datos requerida", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        string cadena = _esPg
+            ? $"Host={h};Port={p};Database={db};Username={u};Password={txtContrasena.Text};"
+            : $"Server={h};Port={p};Database={db};User={u};Password={txtContrasena.Text};";
+
+        btnDetectarTablas.Enabled = false;
+        lblEstadoTablas.Text = "⏳ Conectando y detectando tablas...";
+        lblEstadoTablas.ForeColor = Color.FromArgb(255, 200, 50);
+
+        try
+        {
+            List<string> tablas = await Task.Run(() =>
+                _esPg
+                    ? DatabaseWriter.ObtenerTablasPostgreSQL(cadena)
+                    : DatabaseWriter.ObtenerTablasMariaDB(cadena));
+
+            string tablaActual = cmbTabla.Text;
+            cmbTabla.Items.Clear();
+            foreach (var t in tablas) cmbTabla.Items.Add(t);
+
+            if (tablas.Count > 0)
+            {
+                // Restaurar selección previa o seleccionar la primera
+                int idx = cmbTabla.FindStringExact(tablaActual);
+                cmbTabla.SelectedIndex = idx >= 0 ? idx : 0;
+                lblEstadoTablas.Text = $"✅ {tablas.Count} tabla(s) encontrada(s).";
+                lblEstadoTablas.ForeColor = Color.FromArgb(0, 220, 100);
+            }
+            else
+            {
+                lblEstadoTablas.Text = "⚠ No se encontraron tablas. Escribe el nombre manualmente.";
+                lblEstadoTablas.ForeColor = Color.FromArgb(255, 160, 50);
+            }
+        }
+        catch (Exception ex)
+        {
+            lblEstadoTablas.Text = $"❌ Error: {ex.Message}";
+            lblEstadoTablas.ForeColor = Color.FromArgb(255, 80, 80);
+        }
+        finally
+        {
+            btnDetectarTablas.Enabled = true;
+        }
     }
 }
 
 // ══════════════════════════════════════════════════════════════
-//  DIÁLOGO 2 — Selección de columnas
+//  DIÁLOGO – Exportar datos a BD ⭐ NUEVO
+// ══════════════════════════════════════════════════════════════
+public class FormExportarBD : Form
+{
+    public string CadenaConexion { get; private set; } = "";
+    public string NombreTabla { get; private set; } = "";
+    public string Motor { get; private set; } = "PostgreSQL";
+
+    private readonly RadioButton rbPostgres, rbMariaDB;
+    private readonly TextBox txtHost, txtPuerto, txtBD, txtUsuario, txtContrasena;
+    private readonly ComboBox cmbTabla;
+    private readonly Button btnDetectarTablas;
+    private readonly Label lblEstadoTablas, lblInfo;
+    private readonly int _totalRegistros;
+
+    public FormExportarBD(int totalRegistros)
+    {
+        _totalRegistros = totalRegistros;
+        Text = "Exportar datos a Base de Datos";
+        Size = new Size(510, 490);
+        StartPosition = FormStartPosition.CenterParent;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        BackColor = Color.FromArgb(25, 25, 40);
+        ForeColor = Color.White;
+        Font = new Font("Segoe UI", 9f);
+
+        int y = 12;
+        const int lx = 15, cx = 140, cw = 340;
+
+        // ── Info ──────────────────────────────────────────────
+        lblInfo = new Label
+        {
+            Text = $"Se enviarán {totalRegistros:N0} registros a la base de datos seleccionada.\n" +
+                   "Si la tabla no existe, se creará automáticamente.",
+            Location = new Point(lx, y),
+            Size = new Size(460, 36),
+            ForeColor = Color.FromArgb(0, 200, 220),
+            Font = new Font("Segoe UI", 9f)
+        };
+        y += 48;
+
+        // ── Separador ─────────────────────────────────────────
+        var sep0 = new Label { Location = new Point(lx, y), Size = new Size(455, 2), BackColor = Color.FromArgb(0, 160, 180) };
+        y += 10;
+
+        // ── Motor ─────────────────────────────────────────────
+        var lblMotor = new Label
+        {
+            Text = "Motor:",
+            Location = new Point(lx, y + 3),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(0, 200, 220)
+        };
+        rbPostgres = new RadioButton
+        {
+            Text = "🐘 PostgreSQL",
+            Location = new Point(cx, y),
+            AutoSize = true,
+            Checked = true,
+            ForeColor = Color.FromArgb(100, 180, 255),
+            BackColor = Color.Transparent
+        };
+        rbMariaDB = new RadioButton
+        {
+            Text = "🐬 MariaDB",
+            Location = new Point(cx + 145, y),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(255, 180, 100),
+            BackColor = Color.Transparent
+        };
+        rbPostgres.CheckedChanged += Motor_Changed!;
+        rbMariaDB.CheckedChanged += Motor_Changed!;
+        y += 30;
+
+        var sep1 = new Label { Location = new Point(lx, y), Size = new Size(455, 1), BackColor = Color.FromArgb(55, 55, 75) };
+        y += 10;
+
+        // ── Campos conexión ───────────────────────────────────
+        Label Lbl(string t) => new()
+        { Text = t, AutoSize = true, ForeColor = Color.FromArgb(180, 180, 200) };
+
+        TextBox Txt(string d, bool p = false) => new()
+        {
+            Width = cw,
+            Text = d,
+            BackColor = Color.FromArgb(40, 40, 60),
+            ForeColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            UseSystemPasswordChar = p
+        };
+
+        var l1 = Lbl("Host:"); l1.Location = new Point(lx, y + 3);
+        txtHost = Txt("localhost"); txtHost.Location = new Point(cx, y); y += 32;
+
+        var l2 = Lbl("Puerto:"); l2.Location = new Point(lx, y + 3);
+        txtPuerto = Txt("5432"); txtPuerto.Location = new Point(cx, y); y += 32;
+
+        var l3 = Lbl("Base de datos:"); l3.Location = new Point(lx, y + 3);
+        txtBD = Txt(""); txtBD.Location = new Point(cx, y); y += 32;
+
+        var l4 = Lbl("Usuario:"); l4.Location = new Point(lx, y + 3);
+        txtUsuario = Txt("postgres"); txtUsuario.Location = new Point(cx, y); y += 32;
+
+        var l5 = Lbl("Contraseña:"); l5.Location = new Point(lx, y + 3);
+        txtContrasena = Txt("", true); txtContrasena.Location = new Point(cx, y); y += 32;
+
+        // ── Tabla con detección automática ────────────────────
+        var sep2 = new Label { Location = new Point(lx, y), Size = new Size(455, 2), BackColor = Color.FromArgb(0, 160, 180) };
+        y += 10;
+
+        var lTabla = Lbl("Tabla destino:"); lTabla.Location = new Point(lx, y + 5);
+
+        cmbTabla = new ComboBox
+        {
+            Location = new Point(cx, y + 1),
+            Width = 215,
+            DropDownStyle = ComboBoxStyle.DropDown,
+            BackColor = Color.FromArgb(40, 40, 60),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+        // Nombre por defecto sugerido
+        cmbTabla.Text = "datos_exportados";
+
+        btnDetectarTablas = new Button
+        {
+            Text = "🔍 Ver tablas",
+            Location = new Point(cx + 223, y),
+            Width = 117,
+            Height = 28,
+            BackColor = Color.FromArgb(0, 90, 150),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 8.5f)
+        };
+        btnDetectarTablas.FlatAppearance.BorderSize = 0;
+        btnDetectarTablas.Click += BtnDetectarTablas_Click!;
+        y += 36;
+
+        lblEstadoTablas = new Label
+        {
+            Text = "Ingresa conexión y pulsa 'Ver tablas' para elegir una existente, o escribe un nombre nuevo.",
+            Location = new Point(cx, y),
+            Size = new Size(cw, 30),
+            ForeColor = Color.FromArgb(120, 180, 120),
+            Font = new Font("Segoe UI", 7.8f)
+        };
+        y += 36;
+
+        // ── Botones finales ───────────────────────────────────
+        var ok = new Button
+        {
+            Text = $"📤 Enviar {totalRegistros:N0} registros",
+            Location = new Point(cx, y),
+            Width = 200,
+            Height = 30,
+            DialogResult = DialogResult.OK,
+            BackColor = Color.FromArgb(0, 120, 60),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+        };
+        ok.FlatAppearance.BorderSize = 0;
+
+        var can = new Button
+        {
+            Text = "Cancelar",
+            Location = new Point(cx + 210, y),
+            Width = 90,
+            Height = 30,
+            DialogResult = DialogResult.Cancel,
+            BackColor = Color.FromArgb(80, 30, 30),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+        can.FlatAppearance.BorderSize = 0;
+
+        ok.Click += (_, _) =>
+        {
+            string h = string.IsNullOrWhiteSpace(txtHost.Text) ? "localhost" : txtHost.Text.Trim();
+            string p = string.IsNullOrWhiteSpace(txtPuerto.Text) ? (rbPostgres.Checked ? "5432" : "3306") : txtPuerto.Text.Trim();
+            string u = string.IsNullOrWhiteSpace(txtUsuario.Text) ? (rbPostgres.Checked ? "postgres" : "root") : txtUsuario.Text.Trim();
+            string db = txtBD.Text.Trim();
+
+            if (string.IsNullOrWhiteSpace(db))
+            {
+                MessageBox.Show("Escribe el nombre de la base de datos.",
+                    "Datos incompletos", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                DialogResult = DialogResult.None; return;
+            }
+
+            NombreTabla = cmbTabla.Text.Trim();
+            if (string.IsNullOrWhiteSpace(NombreTabla))
+            {
+                MessageBox.Show("Escribe o selecciona el nombre de la tabla destino.",
+                    "Tabla requerida", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                DialogResult = DialogResult.None; return;
+            }
+
+            Motor = rbPostgres.Checked ? "PostgreSQL" : "MariaDB";
+            CadenaConexion = rbPostgres.Checked
+                ? $"Host={h};Port={p};Database={db};Username={u};Password={txtContrasena.Text};"
+                : $"Server={h};Port={p};Database={db};User={u};Password={txtContrasena.Text};";
+        };
+
+        ClientSize = new Size(478, y + 55);
+        Controls.AddRange(new Control[]
+        {
+            lblInfo, sep0,
+            lblMotor, rbPostgres, rbMariaDB, sep1,
+            l1, txtHost, l2, txtPuerto, l3, txtBD,
+            l4, txtUsuario, l5, txtContrasena,
+            sep2, lTabla, cmbTabla, btnDetectarTablas, lblEstadoTablas,
+            ok, can
+        });
+        AcceptButton = ok;
+        CancelButton = can;
+    }
+
+    private void Motor_Changed(object sender, EventArgs e)
+    {
+        if (rbPostgres.Checked)
+        {
+            txtPuerto.Text = "5432";
+            txtUsuario.Text = "postgres";
+        }
+        else
+        {
+            txtPuerto.Text = "3306";
+            txtUsuario.Text = "root";
+        }
+        // Limpiar lista de tablas al cambiar motor
+        cmbTabla.Items.Clear();
+        lblEstadoTablas.Text = "Motor cambiado. Vuelve a detectar tablas si lo necesitas.";
+        lblEstadoTablas.ForeColor = Color.FromArgb(180, 180, 180);
+    }
+
+    private async void BtnDetectarTablas_Click(object sender, EventArgs e)
+    {
+        string h = string.IsNullOrWhiteSpace(txtHost.Text) ? "localhost" : txtHost.Text.Trim();
+        string p = string.IsNullOrWhiteSpace(txtPuerto.Text) ? (rbPostgres.Checked ? "5432" : "3306") : txtPuerto.Text.Trim();
+        string u = string.IsNullOrWhiteSpace(txtUsuario.Text) ? (rbPostgres.Checked ? "postgres" : "root") : txtUsuario.Text.Trim();
+        string db = txtBD.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(db))
+        {
+            MessageBox.Show("Escribe el nombre de la base de datos primero.",
+                "Base de datos requerida", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        string cadena = rbPostgres.Checked
+            ? $"Host={h};Port={p};Database={db};Username={u};Password={txtContrasena.Text};"
+            : $"Server={h};Port={p};Database={db};User={u};Password={txtContrasena.Text};";
+
+        btnDetectarTablas.Enabled = false;
+        lblEstadoTablas.Text = "⏳ Detectando tablas...";
+        lblEstadoTablas.ForeColor = Color.FromArgb(255, 200, 50);
+
+        try
+        {
+            string tablaActual = cmbTabla.Text;
+            List<string> tablas = await Task.Run(() =>
+                rbPostgres.Checked
+                    ? DatabaseWriter.ObtenerTablasPostgreSQL(cadena)
+                    : DatabaseWriter.ObtenerTablasMariaDB(cadena));
+
+            cmbTabla.Items.Clear();
+            foreach (var t in tablas) cmbTabla.Items.Add(t);
+
+            if (tablas.Count > 0)
+            {
+                int idx = cmbTabla.FindStringExact(tablaActual);
+                if (idx >= 0) cmbTabla.SelectedIndex = idx;
+                else if (!string.IsNullOrWhiteSpace(tablaActual)) cmbTabla.Text = tablaActual;
+                lblEstadoTablas.Text = $"✅ {tablas.Count} tabla(s) encontrada(s). Puedes elegir una o escribir un nombre nuevo.";
+                lblEstadoTablas.ForeColor = Color.FromArgb(0, 220, 100);
+            }
+            else
+            {
+                lblEstadoTablas.Text = "⚠ Sin tablas existentes. Se creará la tabla que escribas.";
+                lblEstadoTablas.ForeColor = Color.FromArgb(255, 160, 50);
+            }
+        }
+        catch (Exception ex)
+        {
+            lblEstadoTablas.Text = $"❌ {ex.Message}";
+            lblEstadoTablas.ForeColor = Color.FromArgb(255, 80, 80);
+        }
+        finally
+        {
+            btnDetectarTablas.Enabled = true;
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DIÁLOGO – Selección de columnas (sin cambios)
 // ══════════════════════════════════════════════════════════════
 public class FormSeleccionColumnas : Form
 {
