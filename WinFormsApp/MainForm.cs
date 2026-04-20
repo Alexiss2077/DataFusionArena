@@ -250,6 +250,12 @@ public partial class MainForm : Form
             string metricaClv = contar ? ""
                 : _infoColumnas.FirstOrDefault(c => c.Display == metricaDisplay).Clave ?? "valor";
 
+            // Detectar si la métrica es una suma acumulable (ventas, totales)
+            // o un valor promediable (scores, precios, medidas)
+            bool esSuma = contar || EsMonedaDisplay(metricaDisplay) ||
+                new[] { "ventas", "sales", "total", "ingreso", "revenue", "cantidad", "count" }
+                    .Any(k => metricaDisplay.ToLower().Contains(k));
+
             string GetGrupo(DataItem item) => grupoClv switch
             {
                 "nombre" => item.Nombre,
@@ -271,13 +277,27 @@ public partial class MainForm : Form
                 };
             }
 
-            var agrupado = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            // Acumular suma Y conteo por grupo
+            var sumaGrupo = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            var conteoGrupo = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var item in fuente)
             {
                 string grupo = GetGrupo(item);
-                if (!agrupado.ContainsKey(grupo)) agrupado[grupo] = 0;
-                agrupado[grupo] += GetValor(item);
+                double val = GetValor(item);
+
+                if (!sumaGrupo.ContainsKey(grupo)) { sumaGrupo[grupo] = 0; conteoGrupo[grupo] = 0; }
+                sumaGrupo[grupo] += val;
+                conteoGrupo[grupo] += 1;
             }
+
+            // Calcular valor final: promedio o suma según el tipo de métrica
+            var agrupado = sumaGrupo.ToDictionary(
+                kv => kv.Key,
+                kv => esSuma
+                    ? kv.Value
+                    : kv.Value / Math.Max(1, conteoGrupo[kv.Key]),
+                StringComparer.OrdinalIgnoreCase);
 
             var data = agrupado
                 .OrderByDescending(kv => kv.Value)
@@ -287,7 +307,11 @@ public partial class MainForm : Form
 
             if (data.Count == 0) { chartMain.Limpiar(); return; }
 
-            string metricaLabel = contar ? "Conteo" : metricaDisplay;
+            // Título descriptivo: "Conteo", "Suma de X", "Promedio de X"
+            string metricaLabel = contar ? "Conteo"
+                : esSuma ? $"Suma de {metricaDisplay}"
+                : $"Promedio de {metricaDisplay}";
+
             string grupoLabel = string.IsNullOrEmpty(grupoDisplay) ? "Categoría" : grupoDisplay;
 
             var tipo = cmbTipoGrafica.Text switch
@@ -1143,5 +1167,4 @@ public partial class MainForm : Form
             MessageBoxButtons.OK, MessageBoxIcon.Information);
 
     private void MenuSalir_Click(object sender, EventArgs e) => Close();
-
 }
