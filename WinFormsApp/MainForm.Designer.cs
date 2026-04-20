@@ -325,7 +325,7 @@ partial class MainForm
             Cursor = Cursors.Hand
         };
         btnSbImport.FlatAppearance.BorderSize = 0;
-        btnSbImport.FlatAppearance.MouseOverBackColor = Color.FromArgb(20, 58, 40);
+        btnSbImport.FlatAppearance.MouseOverBackColor = Color.FromArgb(20, 58, 42);
         btnSbImport.Click += MenuCargarPersonalizado_Click!;
 
         var divImport = new Panel { Dock = DockStyle.Top, Height = 1, BackColor = clrBorder };
@@ -344,7 +344,7 @@ partial class MainForm
             Cursor = Cursors.Hand
         };
         btnSbLimpiar.FlatAppearance.BorderSize = 0;
-        btnSbLimpiar.FlatAppearance.MouseOverBackColor = Color.FromArgb(255, 255, 255, 8);
+        btnSbLimpiar.FlatAppearance.MouseOverBackColor = Color.FromArgb(38, 38, 56);
         btnSbLimpiar.Click += MenuLimpiarDatos_Click!;
         btnSbLimpiar.Paint += (s, e) =>
         {
@@ -407,13 +407,13 @@ partial class MainForm
 
         btnSbExpBD = new Button
         {
-            Text = "↑  Exportar a Base de Datos",
+            Text = "↑  Exportar a BD",
             Dock = DockStyle.Top,
             Height = 38,
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(38, 26, 6),
             ForeColor = clrAmber,
-            Font = new Font("Segoe UI", 8f),
+            Font = new Font("Segoe UI", 8.5f),
             TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(12, 0, 4, 0),
             Cursor = Cursors.Hand
@@ -621,7 +621,7 @@ partial class MainForm
         lblBuscar = FLabel("Buscar en", new Point(16, 18), clrTextDim);
 
         cmbCampoBusqueda = FCombo(new Point(88, 14), 110, clrSurface2, clrText,
-            new object[] { "nombre", "categoria", "fuente", "id", "valor" }, 0);
+            new object[] { }, -1);
 
         txtBusqueda = new TextBox
         {
@@ -643,7 +643,7 @@ partial class MainForm
         // Sort area
         lblOrdenar = FLabel("Ordenar por", new Point(628, 18), clrTextDim);
         cmbCampoOrden = FCombo(new Point(720, 14), 110, clrSurface2, clrText,
-            new object[] { "valor", "nombre", "categoria", "fecha", "id" }, 0);
+            new object[] { }, -1);
         rbAscendente = FRadio("↑ Asc", new Point(840, 10), true, clrSurface);
         rbDescendente = FRadio("↓ Desc", new Point(840, 30), false, clrSurface);
         btnOrdenar = FButton("Ordenar", new Point(916, 13), 80, clrSurface2, clrTextDim, BtnOrdenar_Click!);
@@ -925,7 +925,7 @@ partial class MainForm
         var lblCampoL = FLabel("Campo", new Point(68, 16), clrTextDim);
         lblCampoL.Location = new Point(68, 16);
         cmbLinqCampo = FCombo(new Point(120, 12), 120, clrSurface2, clrText,
-            new object[] { "Categoría", "Nombre", "Fuente", "ID" }, 0);
+            new object[] { }, -1);
         var lblBuscarL = FLabel("Buscar", new Point(254, 16), clrTextDim);
         txtLinqFiltro = new TextBox
         {
