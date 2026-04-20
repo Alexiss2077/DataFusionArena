@@ -14,21 +14,35 @@ public class HomeController : Controller
 
     public HomeController(DataStore store) => _store = store;
 
-    // ── Tabla de datos ──────────────────────────────────────────
     public IActionResult Index(
-        string busqueda = "", string campo = "nombre",
+        string busqueda = "", string campo = "",
         string fuente = "", int pagina = 1)
     {
         var todos = _store.ObtenerTodos();
+        var columnas = _store.ObtenerColumnas();
+        var mapeo = _store.ObtenerMapeo();
+        var fuenteDatos = _store.ObtenerFuente();
 
-        // Filtrar por fuente
+        // Campo de búsqueda por defecto: primera columna que mapee a "nombre", o la primera
+        if (string.IsNullOrEmpty(campo))
+        {
+            var colNombre = mapeo.FirstOrDefault(kv =>
+                string.Equals(kv.Value, "nombre", StringComparison.OrdinalIgnoreCase)).Key;
+            campo = colNombre ?? (columnas.Count > 0 ? columnas[0] : "nombre");
+        }
+
         if (!string.IsNullOrEmpty(fuente))
             todos = todos.Where(d => d.Fuente == fuente).ToList();
 
-        // Filtrar por texto
         if (!string.IsNullOrEmpty(busqueda))
+        {
+            // Determinar clave interna para filtrar
+            string claveInternal = mapeo.TryGetValue(campo, out var mapped)
+                ? mapped.ToLower()
+                : campo.ToLower();
             todos = DataFusionArena.Shared.Processing.DataProcessor
-                        .Filtrar(todos, campo, busqueda);
+                        .Filtrar(todos, claveInternal, busqueda);
+        }
 
         int total = todos.Count;
         int totalPags = (int)Math.Ceiling(total / (double)PageSize);
@@ -43,28 +57,27 @@ public class HomeController : Controller
             Busqueda = busqueda,
             Campo = campo,
             Fuentes = _store.Fuentes(),
-            FuenteActiva = fuente
+            FuenteActiva = fuente,
+            Columnas = columnas,
+            Mapeo = mapeo,
+            FuenteDatos = fuenteDatos
         };
         return View(vm);
     }
 
-    // ── Gráficas ────────────────────────────────────────────────
     public IActionResult Graficas()
     {
         var stats = _store.Estadisticas();
         var todos = _store.ObtenerTodos();
 
-        // Por categoría
         var cats = stats.Values.OrderByDescending(s => s.SumaValores).Take(12).ToList();
 
-        // Por fecha (agrupar por mes)
         var porFecha = todos
             .GroupBy(d => d.Fecha.ToString("yyyy-MM"))
             .OrderBy(g => g.Key)
             .Select(g => (Fecha: g.Key, Total: g.Sum(x => x.Valor)))
             .ToList();
 
-        // Por fuente
         var porFuente = todos
             .GroupBy(d => d.Fuente)
             .Select(g => (Fuente: g.Key, Count: g.Count()))
@@ -84,7 +97,6 @@ public class HomeController : Controller
         return View(vm);
     }
 
-    // ── Cargar archivo desde web ─────────────────────────────────
     [HttpPost]
     public async Task<IActionResult> CargarArchivo(IFormFile archivo)
     {
@@ -124,14 +136,10 @@ public class HomeController : Controller
         };
 
         System.IO.File.Delete(tmp);
-        _store.Agregar(nuevos);
+        _store.Agregar(nuevos, tipo);
         TempData["Ok"] = $"✅ {nuevos.Count} registros cargados desde {archivo.FileName}";
         return RedirectToAction(nameof(Index));
     }
-
-    // ════════════════════════════════════════════════════════════
-    //  DESCARGA DE DATASET COMPLETO ⭐
-    // ════════════════════════════════════════════════════════════
 
     [HttpGet("descargar-datos")]
     public IActionResult DescargarDatos(string formato = "csv")
@@ -151,14 +159,12 @@ public class HomeController : Controller
 
             if (formato.ToLower() == "excel")
             {
-                // Excel
                 contenido = ExportService.ExportarExcel(datos);
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 nombreArchivo = $"dataset_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.xlsx";
             }
             else
             {
-                // CSV por defecto
                 contenido = ExportService.ExportarCsv(datos);
                 contentType = "text/csv; charset=utf-8";
                 nombreArchivo = $"dataset_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.csv";
@@ -190,7 +196,6 @@ public class HomeController : Controller
         }
     }
 
-    // ── API endpoint para Chart.js (JSON) ───────────────────────
     [HttpGet("/api/chartdata")]
     public IActionResult ChartData()
     {

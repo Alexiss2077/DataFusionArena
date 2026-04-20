@@ -1,5 +1,22 @@
 @model HomeViewModel
+@using DataFusionArena.Web.Helpers
 @{ ViewData["Title"] = "Datos"; }
+
+@{
+    // Detectar columnas numéricas para alineación
+    var columnasNumericas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var col in Model.Columnas)
+    {
+        if (DataItemHelper.EsColumnaNumerica(Model.Datos, col, Model.Mapeo))
+            columnasNumericas.Add(col);
+    }
+
+    // Columna "fuente" para coloreado
+    string? colFuente = Model.Mapeo
+        .FirstOrDefault(kv => string.Equals(kv.Value, "fuente", StringComparison.OrdinalIgnoreCase)).Key
+        ?? (Model.Columnas.Contains("fuente", StringComparer.OrdinalIgnoreCase) ? "fuente" : null)
+        ?? (Model.Columnas.Contains("Fuente", StringComparer.OrdinalIgnoreCase) ? "Fuente" : null);
+}
 
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
@@ -9,13 +26,11 @@
         </h4>
     </div>
     <div class="d-flex gap-2">
-        <!-- ⭐ BOTÓN PRINCIPAL: Descargar Dataset Completo -->
         <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalDescargar">
-            <i class="bi bi-cloud-download"></i> 
+            <i class="bi bi-cloud-download"></i>
             <strong>📦 Dataset Completo</strong>
         </button>
 
-        <!-- Cargar archivo -->
         <form asp-action="CargarArchivo" method="post" enctype="multipart/form-data" class="d-flex gap-2">
             <input type="file" name="archivo" accept=".json,.csv,.xml,.txt"
                    class="form-control form-control-sm" style="max-width:220px" required />
@@ -24,7 +39,6 @@
             </button>
         </form>
 
-        <!-- Navegar -->
         <a asp-action="Graficas" class="btn btn-sm btn-outline-warning">
             <i class="bi bi-bar-chart"></i> Gráficas
         </a>
@@ -35,37 +49,28 @@
 <div class="modal fade" id="modalDescargar" tabindex="-1" aria-labelledby="modalDescargaLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="background: var(--bg-card); border-color: var(--bg-light); border: 2px solid var(--bg-light)">
-            
             <div class="modal-header" style="border-bottom: 2px solid var(--cyan)">
                 <h5 class="modal-title" id="modalDescargaLabel" style="color: var(--cyan); font-weight: 700">
                     <i class="bi bi-cloud-download"></i> Descargar Dataset Completo
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-
             <div class="modal-body" style="padding: 2rem">
-                <!-- Información -->
                 <div class="alert alert-success" style="background: rgba(0,224,128,.15); border-color: #00e080; color: var(--fg); margin-bottom: 1.5rem">
                     <i class="bi bi-info-circle-fill me-2"></i>
                     <strong>Información del Dataset:</strong>
                     <ul class="mb-0 mt-2 ps-4">
-                        <li> ⦿ <strong>@Model.TotalRegistros registros</strong> totales acumulados</li>
-                        <li> ⦿ Incluye datos cargados (JSON, CSV, XML, TXT)</li>
-                        <li> ⦿ Incluye datos integrados de API (clima)</li>
-                        <li> ⦿ Incluye datos de bases de datos (si existen)</li>
-                        
+                        <li>⦿ <strong>@Model.TotalRegistros registros</strong> totales acumulados</li>
+                        <li>⦿ Incluye datos cargados (JSON, CSV, XML, TXT)</li>
+                        <li>⦿ Incluye datos integrados de API (clima)</li>
+                        <li>⦿ Incluye datos de bases de datos (si existen)</li>
                     </ul>
                 </div>
-
                 <p style="margin-bottom: 1.5rem; font-size: 0.95rem">
                     <strong>📥 Selecciona el formato:</strong>
                 </p>
-
-                <!-- Opciones de descarga -->
                 <div class="d-grid gap-2">
-                    
-                    <!-- CSV -->
-                    <a href="/descargar-datos?formato=csv" 
+                    <a href="/descargar-datos?formato=csv"
                        class="btn btn-outline-success btn-lg d-flex align-items-center justify-content-between p-3"
                        onclick="descargarArchivo(event)">
                         <div class="text-start">
@@ -74,9 +79,7 @@
                         </div>
                         <i class="bi bi-download" style="font-size: 1.5rem; opacity: 0.5"></i>
                     </a>
-
-                    <!-- EXCEL -->
-                    <a href="/descargar-datos?formato=excel" 
+                    <a href="/descargar-datos?formato=excel"
                        class="btn btn-outline-warning btn-lg d-flex align-items-center justify-content-between p-3"
                        onclick="descargarArchivo(event)">
                         <div class="text-start">
@@ -85,9 +88,7 @@
                         </div>
                         <i class="bi bi-download" style="font-size: 1.5rem; opacity: 0.5"></i>
                     </a>
-
-                    <!-- ESTADÍSTICAS -->
-                    <a href="/descargar-estadisticas" 
+                    <a href="/descargar-estadisticas"
                        class="btn btn-outline-info btn-lg d-flex align-items-center justify-content-between p-3"
                        onclick="descargarArchivo(event)">
                         <div class="text-start">
@@ -96,15 +97,12 @@
                         </div>
                         <i class="bi bi-download" style="font-size: 1.5rem; opacity: 0.5"></i>
                     </a>
-
                 </div>
             </div>
-
             <div class="modal-footer" style="border-top: 1px solid var(--bg-light); padding: 1rem">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
                 <small class="text-muted ms-auto">💡 Usa los botones de arriba para descargar</small>
             </div>
-
         </div>
     </div>
 </div>
@@ -115,9 +113,9 @@
         <div class="col-md-3">
             <label class="form-label small text-muted">Buscar en</label>
             <select name="campo" class="form-select form-select-sm">
-                @foreach (var c in new[]{"nombre","categoria","fuente","id","valor"})
+                @foreach (var col in Model.Columnas)
                 {
-                    <option value="@c" selected="@(Model.Campo==c)">@c</option>
+                    <option value="@col" selected="@(Model.Campo == col)">@col</option>
                 }
             </select>
         </div>
@@ -132,7 +130,7 @@
                 <option value="">— Todas —</option>
                 @foreach (var f in Model.Fuentes)
                 {
-                    <option value="@f" selected="@(Model.FuenteActiva==f)">@f</option>
+                    <option value="@f" selected="@(Model.FuenteActiva == f)">@f</option>
                 }
             </select>
         </div>
@@ -145,12 +143,16 @@
     </div>
 </form>
 
-<!-- Tabla -->
+<!-- Tabla dinámica -->
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center py-2">
         <span class="small fw-bold">
             Página @Model.Pagina de @Model.TotalPaginas
             &nbsp;·&nbsp; Mostrando @Model.Datos.Count de @Model.TotalRegistros
+            @if (Model.Columnas.Count > 0)
+            {
+                <span class="text-muted ms-2">· @Model.Columnas.Count columnas</span>
+            }
         </span>
         <a asp-action="Graficas" class="btn btn-sm btn-outline-cyan">
             <i class="bi bi-bar-chart"></i> Ver Gráficas
@@ -160,57 +162,120 @@
         <table class="table table-sm table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Nombre</th>
-                    <th>Categoría</th>
-                    <th class="text-end">Valor</th>
-                    <th>Fecha</th>
-                    <th>Fuente</th>
+                    @if (Model.Columnas.Count == 0)
+                    {
+                        <!-- Sin datos: headers por defecto -->
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Categoría</th>
+                        <th class="text-end">Valor</th>
+                        <th>Fecha</th>
+                        <th>Fuente</th>
+                    }
+                    else
+                    {
+                        @foreach (var col in Model.Columnas)
+                        {
+                            bool esNum = columnasNumericas.Contains(col);
+                            <th class="@(esNum ? "text-end" : "")">@col</th>
+                        }
+                    }
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Datos.Any())
                 {
-                    <tr><td colspan="6" class="text-center text-muted py-4">Sin resultados</td></tr>
+                    int colCount = Model.Columnas.Count > 0 ? Model.Columnas.Count : 6;
+                    <tr><td colspan="@colCount" class="text-center text-muted py-4">Sin resultados</td></tr>
                 }
                 @foreach (var item in Model.Datos)
                 {
-                    <tr>
-                        <td class="text-muted small">@item.Id</td>
-                        <td>@item.Nombre</td>
-                        <td><span class="badge" style="background:var(--bg-light);color:var(--fg)">@item.Categoria</span></td>
-                        <td class="text-end fw-bold" style="color:var(--yellow)">@item.Valor.ToString("N2")</td>
-                        <td class="small text-muted">@item.Fecha.ToString("yyyy-MM-dd")</td>
-                        <td>
-                            @{
-                                var color = item.Fuente switch {
-                                    "json"          => "success",
-                                    "csv"           => "warning",
-                                    "xml"           => "info",
-                                    "txt"           => "secondary",
-                                    "postgresql"    => "primary",
-                                    "mariadb"       => "danger",
-                                    "api-open-meteo"=> "light",
-                                    _               => "dark"
-                                };
+                    // Determinar color de fila por fuente
+                    string fuente = item.Fuente ?? "";
+                    string rowStyle = fuente switch
+                    {
+                        "json"            => "border-left: 3px solid #00e080;",
+                        "csv"             => "border-left: 3px solid #ffc832;",
+                        "xml"             => "border-left: 3px solid #00c8dc;",
+                        "txt"             => "border-left: 3px solid #b464ff;",
+                        "postgresql"      => "border-left: 3px solid #6496ff;",
+                        "mariadb"         => "border-left: 3px solid #ff9632;",
+                        "api-open-meteo"  => "border-left: 3px solid #e0e0e0;",
+                        _                 => ""
+                    };
+
+                    <tr style="@rowStyle">
+                        @if (Model.Columnas.Count == 0)
+                        {
+                            <td class="text-muted small">@item.Id</td>
+                            <td>@item.Nombre</td>
+                            <td><span class="badge" style="background:var(--bg-light);color:var(--fg)">@item.Categoria</span></td>
+                            <td class="text-end fw-bold" style="color:var(--yellow)">@item.Valor.ToString("N2")</td>
+                            <td class="small text-muted">@item.Fecha.ToString("yyyy-MM-dd")</td>
+                            <td>@{ RenderFuenteBadge(fuente); }</td>
+                        }
+                        else
+                        {
+                            @foreach (var col in Model.Columnas)
+                            {
+                                string val = DataItemHelper.ObtenerValor(item, col, Model.Mapeo);
+                                bool esNum = columnasNumericas.Contains(col);
+                                string clave = Model.Mapeo.TryGetValue(col, out var mk) ? mk.ToLower() : col.ToLower();
+
+                                if (string.Equals(clave, "fuente", StringComparison.OrdinalIgnoreCase)
+                                    || string.Equals(col, "fuente", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <td>
+                                        @{ var badgeColor = val switch {
+                                            "json"           => "success",
+                                            "csv"            => "warning",
+                                            "xml"            => "info",
+                                            "txt"            => "secondary",
+                                            "postgresql"     => "primary",
+                                            "mariadb"        => "danger",
+                                            "api-open-meteo" => "light",
+                                            _                => "dark"
+                                        }; }
+                                        <span class="badge bg-@badgeColor badge-fuente">@val</span>
+                                    </td>
+                                }
+                                else if (string.Equals(clave, "categoria", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <td><span class="badge" style="background:var(--bg-light);color:var(--fg)">@val</span></td>
+                                }
+                                else if (string.Equals(clave, "valor", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <td class="text-end fw-bold" style="color:var(--yellow)">
+                                        @if (double.TryParse(val, System.Globalization.NumberStyles.Any,
+                                            System.Globalization.CultureInfo.InvariantCulture, out double dv))
+                                        { @dv.ToString("N2") }
+                                        else { @val }
+                                    </td>
+                                }
+                                else if (esNum)
+                                {
+                                    <td class="text-end text-muted small">@val</td>
+                                }
+                                else
+                                {
+                                    <td>@val</td>
+                                }
                             }
-                            <span class="badge bg-@color badge-fuente">@item.Fuente</span>
-                        </td>
+                        }
                     </tr>
                 }
             </tbody>
         </table>
     </div>
 
-    <!-- Paginación -->
     @if (Model.TotalPaginas > 1)
     {
         <div class="card-footer d-flex justify-content-center">
             <nav>
                 <ul class="pagination pagination-sm mb-0">
-                    <li class="page-item @(Model.Pagina==1?"disabled":"")">
+                    <li class="page-item @(Model.Pagina == 1 ? "disabled" : "")">
                         <a class="page-link" asp-action="Index"
-                           asp-route-pagina="@(Model.Pagina-1)"
+                           asp-route-pagina="@(Model.Pagina - 1)"
                            asp-route-busqueda="@Model.Busqueda"
                            asp-route-campo="@Model.Campo"
                            asp-route-fuente="@Model.FuenteActiva">‹</a>
@@ -218,7 +283,7 @@
                     @for (int p = Math.Max(1, Model.Pagina - 3);
                           p <= Math.Min(Model.TotalPaginas, Model.Pagina + 3); p++)
                     {
-                        <li class="page-item @(p==Model.Pagina?"active":"")">
+                        <li class="page-item @(p == Model.Pagina ? "active" : "")">
                             <a class="page-link" asp-action="Index"
                                asp-route-pagina="@p"
                                asp-route-busqueda="@Model.Busqueda"
@@ -226,9 +291,9 @@
                                asp-route-fuente="@Model.FuenteActiva">@p</a>
                         </li>
                     }
-                    <li class="page-item @(Model.Pagina==Model.TotalPaginas?"disabled":"")">
+                    <li class="page-item @(Model.Pagina == Model.TotalPaginas ? "disabled" : "")">
                         <a class="page-link" asp-action="Index"
-                           asp-route-pagina="@(Model.Pagina+1)"
+                           asp-route-pagina="@(Model.Pagina + 1)"
                            asp-route-busqueda="@Model.Busqueda"
                            asp-route-campo="@Model.Campo"
                            asp-route-fuente="@Model.FuenteActiva">›</a>
@@ -239,6 +304,24 @@
     }
 </div>
 
+@functions {
+    void RenderFuenteBadge(string fuente)
+    {
+        var color = fuente switch
+        {
+            "json"           => "success",
+            "csv"            => "warning",
+            "xml"            => "info",
+            "txt"            => "secondary",
+            "postgresql"     => "primary",
+            "mariadb"        => "danger",
+            "api-open-meteo" => "light",
+            _                => "dark"
+        };
+        <span class="badge bg-@color badge-fuente">@fuente</span>
+    }
+}
+
 <style>
 .badge-fuente {
     font-size: .75em;
@@ -246,7 +329,6 @@
     padding: 0.4rem 0.6rem;
 }
 
-/* Botón principal con animación */
 .btn-success {
     background-color: #00e080 !important;
     border-color: #00e080 !important;
@@ -263,15 +345,10 @@
 }
 
 @@keyframes pulse-green {
-    0%, 100% { 
-        box-shadow: 0 0 0 0 rgba(0, 224, 128, 0.7);
-    }
-    50% {
-        box-shadow: 0 0 0 8px rgba(0, 224, 128, 0);
-    }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 224, 128, 0.7); }
+    50%       { box-shadow: 0 0 0 8px rgba(0, 224, 128, 0); }
 }
 
-/* Botones en modal */
 .btn-outline-success:hover {
     background-color: #00e080 !important;
     color: #000 !important;
@@ -289,30 +366,27 @@
     color: #000 !important;
     border-color: #00c8dc !important;
 }
+
+/* Limitar ancho de columnas con mucho texto */
+table th, table td {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 </style>
 
 <script>
-// Función para descargar archivo
 function descargarArchivo(event) {
     event.preventDefault();
-    
     const url = event.currentTarget.getAttribute('href');
-    console.log('Descargando desde:', url);
-    
-    // Crear un elemento <a> temporal para la descarga
     const link = document.createElement('a');
     link.href = url;
     link.download = '';
-    
-    // Agregar a DOM, hacer click y remover
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    // Cerrar modal
     const modal = bootstrap.Modal.getInstance(document.getElementById('modalDescargar'));
-    if (modal) {
-        modal.hide();
-    }
+    if (modal) modal.hide();
 }
 </script>
