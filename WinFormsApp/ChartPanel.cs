@@ -14,38 +14,37 @@ public enum TipoGrafica { Columnas, Barras, Pastel }
 public class ChartPanel : Panel
 {
     private List<(string Label, double Value)> _data = new();
-    private TipoGrafica _tipo  = TipoGrafica.Columnas;
-    private string       _titulo = "Sin datos — carga archivos primero";
+    private TipoGrafica _tipo = TipoGrafica.Columnas;
+    private string _titulo = "Sin datos — carga archivos primero";
 
-    // ── Paleta oscura del proyecto ───────────────────────────────
+    // ── Paleta oscura del proyecto ────────────────────────────
     private static readonly Color[] Palette =
     {
-        Color.FromArgb(0,  200, 255), Color.FromArgb(255, 200,   0),
-        Color.FromArgb(0,  255, 128), Color.FromArgb(255,  80, 100),
-        Color.FromArgb(180,100, 255), Color.FromArgb(255, 150,  50),
-        Color.FromArgb(0,  220, 200), Color.FromArgb(220,  80, 220),
-        Color.FromArgb(80, 200,  80), Color.FromArgb(100, 160, 255),
-        Color.FromArgb(255,100, 130), Color.FromArgb( 50, 230, 230)
+        Color.FromArgb(52,  211, 153), Color.FromArgb(251, 191,  36),
+        Color.FromArgb(125, 211, 252), Color.FromArgb(167, 139, 250),
+        Color.FromArgb(251, 113, 133), Color.FromArgb(110, 231, 183),
+        Color.FromArgb(252, 211, 77),  Color.FromArgb(147, 197, 253),
+        Color.FromArgb(196, 181, 253), Color.FromArgb(253, 164, 175),
+        Color.FromArgb( 52, 211, 153), Color.FromArgb(251, 191,  36)
     };
 
-    private static readonly Color BgPanel  = Color.FromArgb(28, 28, 42);
-    private static readonly Color Grid     = Color.FromArgb(55, 55, 75);
-    private static readonly Color AxisClr  = Color.FromArgb(90, 90, 110);
-    private static readonly Color LabelClr = Color.FromArgb(160, 160, 180);
+    private static readonly Color BgPanel = Color.FromArgb(13, 13, 18);
+    private static readonly Color Grid = Color.FromArgb(36, 36, 52);
+    private static readonly Color AxisClr = Color.FromArgb(55, 55, 75);
+    private static readonly Color LabelClr = Color.FromArgb(110, 110, 140);
 
     public ChartPanel()
     {
         DoubleBuffered = true;
-        ResizeRedraw   = true;
-        BackColor      = BgPanel;
+        ResizeRedraw = true;
+        BackColor = BgPanel;
     }
 
-    /// <summary>Actualiza los datos y repinta.</summary>
     public void SetData(List<(string Label, double Value)> data,
                         TipoGrafica tipo, string titulo)
     {
-        _data   = data   ?? new();
-        _tipo   = tipo;
+        _data = data ?? new();
+        _tipo = tipo;
         _titulo = titulo;
         Invalidate();
     }
@@ -57,71 +56,66 @@ public class ChartPanel : Panel
         Invalidate();
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  PAINT principal
-    // ════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════
+    //  PAINT
+    // ════════════════════════════════════════════════════════
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
         var g = e.Graphics;
-        g.SmoothingMode      = SmoothingMode.AntiAlias;
-        g.TextRenderingHint  = TextRenderingHint.ClearTypeGridFit;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
         g.Clear(BgPanel);
 
         if (_data.Count == 0 || _data.Sum(d => d.Value) == 0)
         {
-            DrawCentered(g, _titulo.Contains("datos") ? _titulo
-                : "Sin datos — carga archivos primero",
-                Color.FromArgb(100, 100, 130));
+            DrawCentered(g, "Sin datos — carga archivos primero", LabelClr);
             return;
         }
 
         switch (_tipo)
         {
             case TipoGrafica.Columnas: DrawColumnas(g); break;
-            case TipoGrafica.Barras:   DrawBarras(g);   break;
-            case TipoGrafica.Pastel:   DrawPastel(g);   break;
+            case TipoGrafica.Barras: DrawBarras(g); break;
+            case TipoGrafica.Pastel: DrawPastel(g); break;
         }
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  COLUMNAS  (vertical)
-    // ════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════
+    //  COLUMNAS (vertical)
+    // ════════════════════════════════════════════════════════
     private void DrawColumnas(Graphics g)
     {
-        var (area, titleColor) = PrepararArea(g, TipoGrafica.Columnas);
+        var (area, _) = PrepararArea(g, TipoGrafica.Columnas);
         double max = _data.Max(d => d.Value);
         if (max <= 0) return;
 
         DrawGridLinesH(g, area, max);
         DrawEjes(g, area);
 
-        float bw  = area.Width / _data.Count;
+        float bw = area.Width / _data.Count;
         float gap = Math.Max(3f, bw * 0.18f);
 
         for (int i = 0; i < _data.Count; i++)
         {
             var (lbl, val) = _data[i];
-            float h  = (float)(val / max * area.Height);
-            float x  = area.Left + i * bw + gap / 2f;
-            float y  = area.Bottom - h;
-            float w  = bw - gap;
-            var   c  = Palette[i % Palette.Length];
+            float h = (float)(val / max * area.Height);
+            float x = area.Left + i * bw + gap / 2f;
+            float y = area.Bottom - h;
+            float w = bw - gap;
+            var c = Palette[i % Palette.Length];
 
-            // barra con gradiente
             if (h > 0 && w > 0)
             {
                 var rect = new RectangleF(x, y, w, h);
                 using var br = new LinearGradientBrush(
                     new PointF(x, y), new PointF(x, area.Bottom),
-                    Color.FromArgb(230, c), Color.FromArgb(140, c));
+                    Color.FromArgb(230, c), Color.FromArgb(130, c));
                 g.FillRectangle(br, rect);
-
-                using var pen = new Pen(Color.FromArgb(200, c), 1f);
+                using var pen = new Pen(Color.FromArgb(180, c), 1f);
                 g.DrawRectangle(pen, rect.X, rect.Y, rect.Width, rect.Height);
             }
 
-            // valor encima
             string vs = FormatVal(val);
             using var vf = new Font("Segoe UI", 7.5f, FontStyle.Bold);
             var vs2 = g.MeasureString(vs, vf);
@@ -130,23 +124,39 @@ public class ChartPanel : Panel
                     x + (w - vs2.Width) / 2f,
                     Math.Max(y - vs2.Height - 2f, area.Top + 2));
 
-            // etiqueta X rotada
             DrawXLabel(g, lbl, x + w / 2f, area.Bottom + 5f, c);
         }
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  BARRAS  (horizontal)
-    // ════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════
+    //  BARRAS (horizontal) — etiquetas dinámicas, nunca cortadas
+    // ════════════════════════════════════════════════════════
     private void DrawBarras(Graphics g)
     {
-        // Margen izquierdo más ancho para etiquetas
-        const int marginLeft = 185;
         float titleH = DrawTitulo(g, TipoGrafica.Barras);
+
+        // ── 1. Medir el label más largo para calcular el margen izquierdo
+        using var lblFont = new Font("Segoe UI", 8.5f);
+        float maxLabelW = 0f;
+        foreach (var (lbl, _) in _data)
+        {
+            // Texto completo para medir — no truncamos todavía
+            float w = g.MeasureString(lbl, lblFont).Width;
+            if (w > maxLabelW) maxLabelW = w;
+        }
+
+        // Margen izquierdo = ancho del label más largo + 10px de respiración
+        // Mínimo 90px, máximo 40% del panel para no aplastar las barras
+        float marginLeft = Math.Clamp(maxLabelW + 10f, 90f, Width * 0.40f);
+        float marginRight = 64f;  // espacio para el valor a la derecha
+        float marginTop = titleH + 8f;
+        float marginBot = 16f;
+
         var area = new RectangleF(
-            marginLeft, titleH + 10,
-            Width - marginLeft - 60,
-            Height - titleH - 50);
+            marginLeft,
+            marginTop,
+            Width - marginLeft - marginRight,
+            Height - marginTop - marginBot);
 
         if (area.Height < 20 || area.Width < 20) return;
 
@@ -156,57 +166,81 @@ public class ChartPanel : Panel
         DrawGridLinesV(g, area, max);
         DrawEjes(g, area);
 
-        float bh  = area.Height / _data.Count;
-        float gap = Math.Max(3f, bh * 0.2f);
+        float bh = area.Height / _data.Count;
+        float gap = Math.Max(2f, bh * 0.20f);
 
         for (int i = 0; i < _data.Count; i++)
         {
             var (lbl, val) = _data[i];
             float bw = (float)(val / max * area.Width);
-            float y  = area.Top + i * bh + gap / 2f;
-            float h  = bh - gap;
-            var   c  = Palette[i % Palette.Length];
+            float y = area.Top + i * bh + gap / 2f;
+            float h = bh - gap;
+            var c = Palette[i % Palette.Length];
 
+            // Barra con gradiente
             if (bw > 0 && h > 0)
             {
                 var rect = new RectangleF(area.Left, y, bw, h);
                 using var br = new LinearGradientBrush(
                     new PointF(area.Left, y), new PointF(area.Left + bw, y),
-                    Color.FromArgb(140, c), Color.FromArgb(230, c));
+                    Color.FromArgb(130, c), Color.FromArgb(220, c));
                 g.FillRectangle(br, rect);
-                using var pen = new Pen(Color.FromArgb(200, c), 1f);
+                using var pen = new Pen(Color.FromArgb(180, c), 1f);
                 g.DrawRectangle(pen, rect.X, rect.Y, rect.Width, rect.Height);
             }
 
-            // valor a la derecha
+            // ── Valor a la derecha de la barra
             string vs = FormatVal(val);
             using var vf = new Font("Segoe UI", 7.5f);
-            g.DrawString(vs, vf, new SolidBrush(Color.FromArgb(200, c)),
-                area.Left + bw + 4f, y + (h - vf.Height) / 2f);
+            var vsz = g.MeasureString(vs, vf);
+            g.DrawString(vs, vf,
+                new SolidBrush(Color.FromArgb(190, c)),
+                area.Left + bw + 5f,
+                y + (h - vsz.Height) / 2f);
 
-            // etiqueta izquierda
-            string display = lbl.Length > 22 ? lbl[..20] + "…" : lbl;
-            using var lf = new Font("Segoe UI", 8f);
-            var ls = g.MeasureString(display, lf);
-            g.DrawString(display, lf, new SolidBrush(c),
-                area.Left - ls.Width - 6f,
-                y + (h - ls.Height) / 2f);
+            // ── Etiqueta a la izquierda, ajustada al margen disponible
+            // El espacio real disponible para el texto es marginLeft - 8px
+            float availableW = marginLeft - 8f;
+            string displayLbl = lbl;
+
+            // Si el texto completo no cabe, truncar con "…"
+            if (g.MeasureString(lbl, lblFont).Width > availableW)
+            {
+                // Truncar carácter a carácter hasta que quepa
+                displayLbl = "";
+                foreach (char ch in lbl)
+                {
+                    string candidate = displayLbl + ch;
+                    if (g.MeasureString(candidate + "…", lblFont).Width > availableW)
+                        break;
+                    displayLbl = candidate;
+                }
+                displayLbl += "…";
+            }
+
+            var lblSz = g.MeasureString(displayLbl, lblFont);
+            g.DrawString(
+                displayLbl,
+                lblFont,
+                new SolidBrush(Color.FromArgb(200, c)),
+                area.Left - lblSz.Width - 6f,       // alineado a la derecha del margen
+                y + (h - lblSz.Height) / 2f);
         }
     }
 
-    // ════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════
     //  PASTEL
-    // ════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════
     private void DrawPastel(Graphics g)
     {
         float titleH = DrawTitulo(g, TipoGrafica.Pastel);
         double total = _data.Sum(d => d.Value);
         if (total <= 0) return;
 
-        float legendW = Math.Min(220f, Width * 0.3f);
-        float drawW   = Width - legendW - 20f;
-        float drawH   = Height - titleH - 20f;
-        float radius  = Math.Min(drawW / 2f - 30f, drawH / 2f - 20f);
+        float legendW = Math.Min(220f, Width * 0.30f);
+        float drawW = Width - legendW - 20f;
+        float drawH = Height - titleH - 20f;
+        float radius = Math.Min(drawW / 2f - 30f, drawH / 2f - 20f);
         if (radius < 15) return;
 
         float cx = 20f + drawW / 2f;
@@ -221,17 +255,16 @@ public class ChartPanel : Panel
             float sweep = (float)(val / total * 360.0);
             var c = Palette[i % Palette.Length];
 
-            using var br  = new SolidBrush(c);
+            using var br = new SolidBrush(c);
             using var sep = new Pen(BgPanel, 2f);
             g.FillPie(br, pieRect, startAngle, sweep);
             g.DrawPie(sep, pieRect, startAngle, sweep);
 
-            // Porcentaje dentro del slice si es lo suficientemente grande
             if (sweep > 12f)
             {
                 double midRad = (startAngle + sweep / 2f) * Math.PI / 180.0;
-                float  lx = cx + (float)(Math.Cos(midRad) * radius * 0.62f);
-                float  ly = cy + (float)(Math.Sin(midRad) * radius * 0.62f);
+                float lx = cx + (float)(Math.Cos(midRad) * radius * 0.62f);
+                float ly = cy + (float)(Math.Sin(midRad) * radius * 0.62f);
                 string pct = $"{val / total:P0}";
                 using var pf = new Font("Segoe UI", 7.5f, FontStyle.Bold);
                 var ps = g.MeasureString(pct, pf);
@@ -250,59 +283,61 @@ public class ChartPanel : Panel
         {
             var (lbl, val) = _data[i];
             var c = Palette[i % Palette.Length];
-            string display = lbl.Length > 20 ? lbl[..18] + "…" : lbl;
-            string pct     = $"{val / total:P1}";
+            string display = lbl.Length > 22 ? lbl[..20] + "…" : lbl;
+            string pct = $"{val / total:P1}";
 
             g.FillRectangle(new SolidBrush(c), lx2, ly2 + 1, 11, 11);
-            g.DrawString($"{display}  {pct}", legF, new SolidBrush(LabelClr),
-                lx2 + 15f, ly2 - 1f);
+            g.DrawString($"{display}  {pct}", legF,
+                new SolidBrush(LabelClr), lx2 + 15f, ly2 - 1f);
             ly2 += 16f;
         }
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  HELPERS DE DIBUJO
-    // ════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════
+    //  HELPERS
+    // ════════════════════════════════════════════════════════
 
     private float DrawTitulo(Graphics g, TipoGrafica t)
     {
         var titleColor = t switch
         {
-            TipoGrafica.Columnas => Color.FromArgb(0,  200, 220),
-            TipoGrafica.Barras   => Color.FromArgb(255,200,  50),
-            TipoGrafica.Pastel   => Color.FromArgb(0,  224, 128),
+            TipoGrafica.Columnas => Color.FromArgb(52, 211, 153),
+            TipoGrafica.Barras => Color.FromArgb(251, 191, 36),
+            TipoGrafica.Pastel => Color.FromArgb(125, 211, 252),
             _ => Color.White
         };
-        using var tf = new Font("Segoe UI", 11f, FontStyle.Bold);
+        using var tf = new Font("Segoe UI", 10f, FontStyle.Bold);
         var ts = g.MeasureString(_titulo, tf);
         g.DrawString(_titulo, tf, new SolidBrush(titleColor),
             (Width - ts.Width) / 2f, 8f);
-        return ts.Height + 12f;
+        return ts.Height + 14f;
     }
 
     private (RectangleF area, Color tc) PrepararArea(Graphics g, TipoGrafica t)
     {
         float titleH = DrawTitulo(g, t);
         const int marginLeft = 68;
+        const int marginBottom = 80;  // enough room for 45° rotated labels
         var area = new RectangleF(
-            marginLeft, titleH + 5,
+            marginLeft,
+            titleH + 5,
             Width - marginLeft - 20,
-            Height - titleH - 55);
+            Height - titleH - marginBottom);
         return (area, Color.White);
     }
 
     private void DrawGridLinesH(Graphics g, RectangleF area, double max)
     {
-        using var gp  = new Pen(Grid, 1f) { DashStyle = DashStyle.Dash };
-        using var lf  = new Font("Segoe UI", 7f);
-        const int n   = 5;
+        using var gp = new Pen(Grid, 1f) { DashStyle = DashStyle.Dash };
+        using var lf = new Font("Segoe UI", 7f);
+        const int n = 5;
         for (int i = 0; i <= n; i++)
         {
             double val = max * i / n;
-            float  y   = area.Bottom - (float)(i * area.Height / n);
+            float y = area.Bottom - (float)(i * area.Height / n);
             g.DrawLine(gp, area.Left, y, area.Right, y);
             string vs = FormatVal(val);
-            var    sz = g.MeasureString(vs, lf);
+            var sz = g.MeasureString(vs, lf);
             g.DrawString(vs, lf, new SolidBrush(LabelClr),
                 area.Left - sz.Width - 3f, y - sz.Height / 2f);
         }
@@ -312,14 +347,14 @@ public class ChartPanel : Panel
     {
         using var gp = new Pen(Grid, 1f) { DashStyle = DashStyle.Dash };
         using var lf = new Font("Segoe UI", 7f);
-        const int n  = 5;
+        const int n = 5;
         for (int i = 0; i <= n; i++)
         {
             double val = max * i / n;
-            float  x   = area.Left + (float)(i * area.Width / n);
+            float x = area.Left + (float)(i * area.Width / n);
             g.DrawLine(gp, x, area.Top, x, area.Bottom);
             string vs = FormatVal(val);
-            var    sz = g.MeasureString(vs, lf);
+            var sz = g.MeasureString(vs, lf);
             g.DrawString(vs, lf, new SolidBrush(LabelClr),
                 x - sz.Width / 2f, area.Bottom + 3f);
         }
@@ -334,14 +369,21 @@ public class ChartPanel : Panel
 
     private void DrawXLabel(Graphics g, string label, float cx, float baseY, Color c)
     {
-        string txt = label.Length > 13 ? label[..11] + "…" : label;
+        // Calculate max chars that fit given the available diagonal space
+        // With 45° rotation and marginBottom=80, diagonal length ≈ 80/sin(45°) ≈ 113px
         using var f = new Font("Segoe UI", 7.5f);
-        var sz = g.MeasureString(txt, f);
+        string txt = label;
 
+        // Measure and truncate if needed to fit within ~110px of diagonal space
+        while (txt.Length > 1 && g.MeasureString(txt, f).Width > 110)
+            txt = txt[..^1];
+        if (txt.Length < label.Length) txt = txt.TrimEnd() + "…";
+
+        var sz = g.MeasureString(txt, f);
         var state = g.Save();
-        g.TranslateTransform(cx, baseY + sz.Width / 2f);
+        g.TranslateTransform(cx, baseY + 4f);
         g.RotateTransform(-45f);
-        g.DrawString(txt, f, new SolidBrush(Color.FromArgb(180, c)),
+        g.DrawString(txt, f, new SolidBrush(Color.FromArgb(190, c)),
             -sz.Width / 2f, 0f);
         g.Restore(state);
     }
@@ -351,13 +393,16 @@ public class ChartPanel : Panel
         using var f = new Font("Segoe UI", 11f);
         var sz = g.MeasureString(text, f);
         g.DrawString(text, f, new SolidBrush(c),
-            (Width - sz.Width) / 2f, (Height - sz.Height) / 2f);
+            (Width - sz.Width) / 2f,
+            (Height - sz.Height) / 2f);
     }
 
     private static string FormatVal(double v)
     {
         if (v >= 1_000_000) return $"{v / 1_000_000:F1}M";
-        if (v >= 1_000)     return $"{v / 1_000:F0}K";
-        return $"{v:F1}";
+        if (v >= 1_000) return $"{v / 1_000:F0}K";
+        // Show as integer if the value has no meaningful decimal part
+        if (v == Math.Floor(v)) return $"{(long)v}";
+        return $"{v:F2}";
     }
 }
