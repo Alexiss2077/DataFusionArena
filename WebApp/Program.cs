@@ -1,16 +1,12 @@
 using DataFusionArena.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.WebHost.UseUrls("http://*:5000"); //extrerna conexion
+builder.WebHost.UseUrls("http://*:5000");
 builder.Services.AddControllersWithViews();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<DataStore>();
 
 var app = builder.Build();
-
-// Cargar datos iniciales (archivos SampleData) al arrancar
-var store = app.Services.GetRequiredService<DataStore>();
-store.CargarDatosIniciales(app.Environment.ContentRootPath);
 
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Home/Error");
