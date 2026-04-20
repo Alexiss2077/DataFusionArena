@@ -250,10 +250,11 @@ public partial class MainForm : Form
             string metricaClv = contar ? ""
                 : _infoColumnas.FirstOrDefault(c => c.Display == metricaDisplay).Clave ?? "valor";
 
-            // Detectar si la métrica es una suma acumulable (ventas, totales)
-            // o un valor promediable (scores, precios, medidas)
-            bool esSuma = contar || EsMonedaDisplay(metricaDisplay) ||
-                new[] { "ventas", "sales", "total", "ingreso", "revenue", "cantidad", "count" }
+            // Suma solo tiene sentido para campos acumulables (ventas, cantidades, ingresos)
+            // Precio, scores y medidas deben promediarse para ser informativos
+            bool esSuma = contar ||
+                new[] { "ventas", "sales", "revenue", "total", "ingreso",
+                        "cantidad", "count", "units", "unidades" }
                     .Any(k => metricaDisplay.ToLower().Contains(k));
 
             string GetGrupo(DataItem item) => grupoClv switch
