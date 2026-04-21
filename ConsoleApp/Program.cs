@@ -179,8 +179,18 @@ class Program
         return "";
     }
 
+    // Devuelve los nombres originales del dataset (Display) para mostrar al usuario
     static List<string> ObtenerCamposDisponibles() =>
-        _columnas.Select(c => c.Clave).ToList();
+        _columnas.Select(c => c.Display).ToList();
+
+    // Traduce el Display elegido por el usuario a la Clave interna para DataProcessor
+    static string ResolverClave(string displayOClave)
+    {
+        var col = _columnas.FirstOrDefault(c =>
+            string.Equals(c.Display, displayOClave, StringComparison.OrdinalIgnoreCase));
+        if (col != default) return col.Clave;
+        return displayOClave.ToLowerInvariant();
+    }
 
     // ══════════════════════════════════════════════════════════════
     //  BANNER Y MENÚ
@@ -500,7 +510,8 @@ class Program
         Console.WriteLine($"  {string.Join(" / ", campos)}");
         Console.ResetColor();
         Console.Write("\n  Campo a filtrar: ");
-        string campo = Console.ReadLine()?.Trim().ToLower() ?? "nombre";
+        string campoDisplay = Console.ReadLine()?.Trim() ?? "";
+        string campo = ResolverClave(campoDisplay);
         Console.Write("  Valor a buscar: ");
         string valor = Console.ReadLine()?.Trim() ?? "";
 
@@ -518,12 +529,13 @@ class Program
         Console.WriteLine($"  {string.Join(" / ", campos)}");
         Console.ResetColor();
         Console.Write("\n  Campo para ordenar: ");
-        string campo = Console.ReadLine()?.Trim().ToLower() ?? "valor";
+        string campoDisplay = Console.ReadLine()?.Trim() ?? "";
+        string campo = ResolverClave(campoDisplay);
         Console.Write("  Dirección [A = ascendente / D = descendente]: ");
         bool asc = (Console.ReadLine()?.Trim().ToUpper() ?? "A") != "D";
 
         var ordenados = DataProcessor.Ordenar(_datos, campo, asc);
-        Color(ConsoleColor.Cyan, $"\n  Ordenado por '{campo}' {(asc ? "Ascendente ↑" : "Descendente ↓")}\n");
+        Color(ConsoleColor.Cyan, $"\n  Ordenado por '{campoDisplay}' {(asc ? "Ascendente ↑" : "Descendente ↓")}\n");
         ImprimirTabla(ordenados);
     }
 
@@ -691,10 +703,6 @@ class Program
 
     // ── Helpers de exportación ────────────────────────────────────
 
-    /// <summary>
-    /// Devuelve la lista de columnas originales y su mapeo para exportar.
-    /// Prioridad: último reader usado → CamposExtra keys → columnas por defecto.
-    /// </summary>
     static (List<string> columnas, Dictionary<string, string> mapeo) ObtenerInfoExport()
     {
         string ultimaFuente = _datos.Count > 0 ? _datos[^1].Fuente : "";
@@ -710,22 +718,15 @@ class Program
         if ((ultimaFuente == "mariadb" || ultimaFuente == "postgresql") && _ultimasColumnasBD.Count > 0)
             return (new List<string>(_ultimasColumnasBD), _ultimoMapeoBD);
 
-        // Fallback: claves de CamposExtra
         var extraKeys = _datos.SelectMany(d => d.CamposExtra.Keys)
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(k => k).ToList();
         if (extraKeys.Count > 0)
             return (extraKeys, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
-        // Default mínimo
         return (new List<string> { "id", "nombre", "categoria", "valor", "fecha", "fuente" },
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
     }
 
-    /// <summary>
-    /// Obtiene el valor de una columna para un item:
-    /// primero busca en CamposExtra (valor RAW original),
-    /// luego hace fallback al campo DataItem mapeado.
-    /// </summary>
     static string GetValorExport(DataItem item, string col, Dictionary<string, string> mapeo)
     {
         if (item.CamposExtra.TryGetValue(col, out var v)) return v ?? "";
