@@ -44,7 +44,7 @@ public static class CsvDataReader
                                        .Select(h => h.Trim().Replace("\"", ""))
                                        .ToList();
 
-            int idxId = BuscarColumna(mapa, "id", "car_id", "codigo", "code", "sku", "#");
+            int idxId = BuscarColumna(mapa, "id", "car_id", "usedcarskuid", "sku_id", "codigo", "code", "sku", "#", "uuid", "guid");
             int idxNombre = BuscarColumna(mapa, "nombre", "name", "titulo", "title", "producto",
                                           "juego", "descripcion", "description", "player", "jugador",
                                           "employee", "empleado", "brand", "marca");
@@ -86,13 +86,30 @@ public static class CsvDataReader
 
                     var item = new DataItem { Fuente = "csv" };
 
-                    item.Id = idxId >= 0 ? ParseInt(cols, idxId) : fila;
+                    // Si el campo id no es numérico (ej. UUID), usar el número de fila
+                    int parsedId = idxId >= 0 ? ParseInt(cols, idxId) : 0;
+                    item.Id = parsedId != 0 ? parsedId : fila;
+                    // Si el id era un UUID/texto, guardarlo en CamposExtra para no perderlo
+                    if (idxId >= 0 && parsedId == 0)
+                    {
+                        string rawId = Limpiar(cols, idxId);
+                        if (!string.IsNullOrEmpty(rawId))
+                            item.CamposExtra[encabezados[idxId]] = rawId;
+                    }
                     item.Nombre = idxNombre >= 0 ? Limpiar(cols, idxNombre) : $"Fila-{fila}";
                     item.Categoria = idxCat >= 0 ? Limpiar(cols, idxCat) : "Sin categoría";
                     item.Valor = idxValor >= 0 ? ParseDouble(cols, idxValor) : 0;
                     item.Fecha = idxFecha >= 0 ? ParseFechaEspecial(cols, idxFecha, encabezados[idxFecha]) : DateTime.Now;
 
-                    var usadas = new HashSet<int> { idxId, idxNombre, idxCat, idxValor, idxFecha };
+                    // Si el id era texto/UUID ya lo guardamos arriba en CamposExtra,
+                    // así que NO lo excluimos del loop de extras (evita duplicado vacío).
+                    // Solo excluir idxId del loop si fue numérico (parsedId != 0).
+                    var usadas = new HashSet<int>();
+                    if (idxId >= 0 && parsedId != 0) usadas.Add(idxId);
+                    if (idxNombre >= 0) usadas.Add(idxNombre);
+                    if (idxCat >= 0) usadas.Add(idxCat);
+                    if (idxValor >= 0) usadas.Add(idxValor);
+                    if (idxFecha >= 0) usadas.Add(idxFecha);
                     for (int c = 0; c < encabezados.Length; c++)
                     {
                         if (usadas.Contains(c)) continue;
