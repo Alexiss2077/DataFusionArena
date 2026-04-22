@@ -54,7 +54,8 @@ public static class CsvDataReader
             int idxCat = BuscarColumna(mapa,
                 "categoria", "category", "genero", "genre", "tipo", "type", "grupo", "group",
                 "departamento", "department", "nivel", "level", "fuel_type", "transmission",
-                "fuel", "body", "cartype", "car_type", "utype");
+                "fuel", "body", "cartype", "car_type", "utype",
+                "store_type", "store type");
             int idxValor = BuscarColumna(mapa,
                 "valor", "value", "precio", "price", "monto", "amount", "ventas", "score",
                 "puntos", "points", "salario", "salary", "total", "listed_price", "ip",
