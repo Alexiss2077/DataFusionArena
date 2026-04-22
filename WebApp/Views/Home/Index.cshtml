@@ -123,7 +123,7 @@ else
     <form method="get" class="card mb-3 p-3">
         <div class="row g-2 align-items-end">
             <div class="col-md-3">
-                <label class="form-label small text-muted">Buscar en</label>
+                <label class="form-label small" style="color:var(--cyan)">Buscar en</label>
                 <select name="campo" class="form-select form-select-sm">
                     @foreach (var col in Model.Columnas)
                     {
@@ -132,12 +132,12 @@ else
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label small text-muted">Valor</label>
+                <label class="form-label small" style="color:var(--cyan)">Valor</label>
                 <input name="busqueda" value="@Model.Busqueda"
                        class="form-control form-control-sm" placeholder="Escribe para filtrar..." />
             </div>
             <div class="col-md-3">
-                <label class="form-label small text-muted">Fuente</label>
+                <label class="form-label small" style="color:var(--cyan)">Fuente</label>
                 <select name="fuente" class="form-select form-select-sm">
                     <option value="">— Todas —</option>
                     @foreach (var f in Model.Fuentes)
@@ -287,6 +287,11 @@ else
 
 <style>
 .badge-fuente { font-size: .75em; font-weight: 600; padding: 0.4rem 0.6rem; }
+
+/* Textos visibles */
+.form-control::placeholder { color: #8888aa !important; opacity: 1; }
+.text-muted { color: #9999bb !important; }
+.card-header .text-muted { color: #9999bb !important; }
 
 /* ── Separadores de columnas ── */
 .table-col-sep thead th {
