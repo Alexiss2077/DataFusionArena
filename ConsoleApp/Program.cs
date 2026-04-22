@@ -264,6 +264,7 @@ class Program
         Console.WriteLine("  [9] 🧹  Detectar y eliminar duplicados");
         Console.WriteLine("  [E] 💾  Exportar datos");
         Console.WriteLine("  [L] ⚡  Bonus: operaciones LINQ");
+        Console.WriteLine("  [C] 🗑️   Limpiar datos cargados");
         Console.WriteLine("  [0] 🚪  Salir");
         Console.Write("\n  Opción: ");
 
@@ -283,6 +284,7 @@ class Program
             case "9": GestionarDuplicados(); break;
             case "E": ExportarDatos(); break;
             case "L": BonusLinq(); break;
+            case "C": LimpiarDatos(); break;
             case "0": return false;
             default: Color(ConsoleColor.Red, "  ⚠  Opción no válida.\n"); break;
         }
@@ -937,6 +939,40 @@ class Program
     // ══════════════════════════════════════════════════════════════
     //  HELPERS
     // ══════════════════════════════════════════════════════════════
+
+    static void LimpiarDatos()
+    {
+        if (_datos.Count == 0)
+        {
+            Color(ConsoleColor.Yellow, "  No hay datos cargados.");
+            return;
+        }
+
+        Console.Write($"  ⚠  Se borrarán {_datos.Count} registros. ¿Confirmar? (s/N): ");
+        if (Console.ReadLine()?.Trim().ToLower() != "s")
+        {
+            Color(ConsoleColor.Yellow, "  Operación cancelada.");
+            return;
+        }
+
+        _datos.Clear();
+        _porCategoria.Clear();
+        _porId.Clear();
+        _columnas = ObtenerColumnasDefault();
+
+        // Limpiar metadatos de los readers para que el siguiente archivo
+        // sea detectado desde cero sin columnas residuales.
+        // Aunque el setter es privado, .Clear() sobre la instancia sí funciona.
+        CsvDataReader.UltimasColumnas.Clear(); CsvDataReader.MapeoColumnas.Clear();
+        JsonDataReader.UltimasColumnas.Clear(); JsonDataReader.MapeoColumnas.Clear();
+        XmlDataReader.UltimasColumnas.Clear(); XmlDataReader.MapeoColumnas.Clear();
+        TxtDataReader.UltimasColumnas.Clear(); TxtDataReader.MapeoColumnas.Clear();
+        _ultimasColumnasBD.Clear();
+        _ultimoMapeoBD.Clear();
+        _ultimaFuenteBD = "";
+
+        Color(ConsoleColor.Green, "  ✅ Datos limpiados. Puedes cargar un nuevo dataset.");
+    }
 
     static void ActualizarIndices()
     {
