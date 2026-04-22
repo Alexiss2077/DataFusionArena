@@ -100,10 +100,11 @@ public static class XmlDataReader
                     item.Valor = LeerDouble(el, _valorAliases) ?? 0;
                     item.Fecha = LeerFecha(el, _fechaAliases) ?? DateTime.Now;
 
+                    // Solo excluir los campos que realmente fueron mapeados a propiedades
+                    // estándar. No usar todos los aliases — si un campo coincide con un alias
+                    // pero otro campo ya tomó ese rol, el primero debe ir a CamposExtra.
                     var mapeadas = new HashSet<string>(
-                        _idAliases.Concat(_nombreAliases).Concat(_categoriaAliases)
-                                  .Concat(_valorAliases).Concat(_fechaAliases),
-                        StringComparer.OrdinalIgnoreCase);
+                        MapeoColumnas.Keys, StringComparer.OrdinalIgnoreCase);
 
                     foreach (var attr in el.Attributes())
                     {

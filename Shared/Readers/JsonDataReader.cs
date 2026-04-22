@@ -280,9 +280,9 @@ public static class JsonDataReader
                 item.Valor = LeerDouble(el, _valorKeys) ?? FallbackPrimerNumero(el, _idKeys) ?? 0.0;
                 item.Fecha = LeerFecha(el, _fechaKeys) ?? DateTime.Now;
 
-                var usadas = new HashSet<string>(_idKeys.Concat(_nombreKeys).Concat(_categoriaKeys)
-                                                       .Concat(_valorKeys).Concat(_fechaKeys),
-                                                StringComparer.OrdinalIgnoreCase);
+                // Solo excluir campos realmente mapeados, no todos los aliases posibles
+                var usadas = new HashSet<string>(MapeoColumnas.Keys,
+                                            StringComparer.OrdinalIgnoreCase);
                 foreach (var prop in el.EnumerateObject())
                 {
                     if (usadas.Contains(prop.Name)) continue;
