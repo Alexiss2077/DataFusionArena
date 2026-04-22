@@ -38,7 +38,7 @@
             (el mismo modelo universal del proyecto) y se pueden integrar al DataSet
             para analizarlos junto con los datos de archivos y bases de datos.
             <br/>
-            <span class="text-muted">
+            <span style="color:#9999bb">
                 URL:
                 <code style="font-size:.8em">
                 https://api.open-meteo.com/v1/forecast?latitude=25.67&amp;longitude=-100.31
@@ -66,7 +66,7 @@ else
             Pronóstico 14 Días – @Model.Ciudad
         </div>
         <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0">
+            <table class="table table-sm table-hover align-middle mb-0 table-clima-sep">
                 <thead>
                     <tr>
                         <th>Clima</th>
@@ -83,12 +83,12 @@ else
                         <tr>
                             <td style="font-size:1.3em">@dia.IconoClima</td>
                             <td class="fw-bold">@dia.Fecha</td>
-                            <td class="text-end" style="color:#ff9632">@dia.TempMax.ToString("F1")°</td>
-                            <td class="text-end" style="color:#6496ff">@dia.TempMin.ToString("F1")°</td>
-                            <td class="text-end" style="color:@(dia.Precipitacion > 3 ? "#00c8dc" : "var(--fg)")">
+                            <td class="text-end temp-max">@dia.TempMax.ToString("F1")°</td>
+                            <td class="text-end temp-min">@dia.TempMin.ToString("F1")°</td>
+                            <td class="text-end @(dia.Precipitacion > 3 ? "precip-alta" : "precip-baja")">
                                 @dia.Precipitacion.ToString("F1") mm
                             </td>
-                            <td class="text-end text-muted">@dia.Viento.ToString("F0")</td>
+                            <td class="text-end viento">@dia.Viento.ToString("F0")</td>
                         </tr>
                     }
                 </tbody>
@@ -151,12 +151,45 @@ else
     "temperature_2m_max":  [@(Model.TempMax.FirstOrDefault().ToString("F1")), @(Model.TempMax.Skip(1).FirstOrDefault().ToString("F1")), ...],
     "temperature_2m_min":  [@(Model.TempMin.FirstOrDefault().ToString("F1")), @(Model.TempMin.Skip(1).FirstOrDefault().ToString("F1")), ...],
     "precipitation_sum":   [@(Model.Precipitacion.FirstOrDefault().ToString("F1")), ...],
-    "windspeed_10m_max":   [@(Model.Viento.FirstOrDefault().ToString("F1")), ...]
+    "windspeed_10m_max":   [@(Model.Viento.FirstOrDefault().ToString("F0")), ...]
   }
 }</pre>
         </div>
     </div>
 }
+
+<style>
+/* ── Separadores de columnas ── */
+.table-clima-sep {
+    background-color: var(--bg-card) !important;
+}
+.table-clima-sep thead th {
+    border-right: 1px solid #3a3a58;
+    border-bottom: 2px solid var(--cyan) !important;
+    color: var(--cyan) !important;
+    background-color: var(--bg-light) !important;
+}
+.table-clima-sep thead th:last-child { border-right: none; }
+.table-clima-sep tbody tr {
+    background-color: var(--bg-card) !important;
+}
+.table-clima-sep tbody td {
+    border-right: 1px solid #2a2a3c;
+    color: var(--fg) !important;
+    background-color: var(--bg-card) !important;
+}
+.table-clima-sep tbody td:last-child { border-right: none; }
+.table-clima-sep tbody tr:hover td {
+    border-right-color: #3a3a58;
+    background-color: var(--bg-light) !important;
+}
+/* Colores específicos por columna */
+.table-clima-sep tbody tr td.temp-max   { color: #ff9632 !important; }
+.table-clima-sep tbody tr td.temp-min   { color: #6496ff !important; }
+.table-clima-sep tbody tr td.precip-alta{ color: #00c8dc !important; }
+.table-clima-sep tbody tr td.precip-baja{ color: #8888aa !important; }
+.table-clima-sep tbody tr td.viento     { color: #8888aa !important; }
+</style>
 
 @section Scripts {
 <script>
