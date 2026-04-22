@@ -21,7 +21,7 @@ class Program
 
     // Ancho máximo de columna para visualización
     const int MAX_ANCHO_COL = 22;
-    // Ancho máximo total de la tabla en consola (deja margen)
+    // Ancho máximo total de la tabla en consola 
     const int MAX_ANCHO_TABLA = 200;
 
     static void Main(string[] args)
