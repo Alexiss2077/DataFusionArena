@@ -3,10 +3,22 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.WebHost.UseUrls("http://0.0.0.0:5000");  // red local + localhost 
+builder.WebHost.UseUrls("http://0.0.0.0:5000");
 builder.Services.AddControllersWithViews();
 builder.Services.AddHttpClient();
-builder.Services.AddSingleton<DataStore>();
+
+// Sesiones HTTP
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromHours(2);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.Cookie.Name = ".DataFusion.Session";
+});
+
+// SessionDataStore: un DataStore por usuario
+builder.Services.AddSingleton<SessionDataStore>();
 
 // Límite de subida: 200 MB
 const long LimiteBytes = 209_715_200L;
@@ -29,13 +41,9 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStaticFiles();
 app.UseRouting();
-
+app.UseSession(); // debe ir antes de MapControllerRoute
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
-
-// Cargar datos iniciales de SampleData
-var store = app.Services.GetRequiredService<DataStore>();
-store.CargarDatosIniciales(app.Environment.ContentRootPath);
 
 app.Run();

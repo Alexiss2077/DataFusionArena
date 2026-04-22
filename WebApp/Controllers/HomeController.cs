@@ -3,28 +3,45 @@ using DataFusionArena.Shared.Models;
 using DataFusionArena.Shared.Readers;
 using DataFusionArena.Web.Models;
 using DataFusionArena.Web.Services;
-using System.Text.Json;
 
 namespace DataFusionArena.Web.Controllers;
 
 public class HomeController : Controller
 {
-    private readonly DataStore _store;
+    private readonly SessionDataStore _sessionStore;
     private const int PageSize = 20;
-
-    // Límite de tamaño: 200 MB
     private const long MaxFileSizeBytes = 209_715_200L;
 
-    public HomeController(DataStore store) => _store = store;
+    public HomeController(SessionDataStore sessionStore)
+    {
+        _sessionStore = sessionStore;
+    }
+
+    // Obtiene el DataStore del usuario actual (crea sesión si no existe)
+    private DataStore Store
+    {
+        get
+        {
+            // Asegurar que la sesión esté iniciada
+            if (string.IsNullOrEmpty(HttpContext.Session.Id))
+                HttpContext.Session.SetString("init", "1");
+
+            return _sessionStore.ObtenerSesion(HttpContext.Session.Id);
+        }
+    }
 
     public IActionResult Index(
         string busqueda = "", string campo = "",
         string fuente = "", int pagina = 1)
     {
-        var todos = _store.ObtenerTodos();
-        var columnas = _store.ObtenerColumnas();
-        var mapeo = _store.ObtenerMapeo();
-        var fuenteDatos = _store.ObtenerFuente();
+        // Inicializar sesión en primer acceso
+        HttpContext.Session.SetString("active", "1");
+
+        var store = Store;
+        var todos = store.ObtenerTodos();
+        var columnas = store.ObtenerColumnas();
+        var mapeo = store.ObtenerMapeo();
+        var fuenteDatos = store.ObtenerFuente();
 
         if (string.IsNullOrEmpty(campo))
         {
@@ -57,7 +74,7 @@ public class HomeController : Controller
             TotalPaginas = totalPags,
             Busqueda = busqueda,
             Campo = campo,
-            Fuentes = _store.Fuentes(),
+            Fuentes = store.Fuentes(),
             FuenteActiva = fuente,
             Columnas = columnas,
             Mapeo = mapeo,
@@ -68,8 +85,9 @@ public class HomeController : Controller
 
     public IActionResult Graficas()
     {
-        var stats = _store.Estadisticas();
-        var todos = _store.ObtenerTodos();
+        var store = Store;
+        var stats = store.Estadisticas();
+        var todos = store.ObtenerTodos();
 
         var cats = stats.Values.OrderByDescending(s => s.SumaValores).Take(12).ToList();
 
@@ -103,6 +121,8 @@ public class HomeController : Controller
     [RequestFormLimits(MultipartBodyLengthLimit = 209_715_200)]
     public async Task<IActionResult> CargarArchivo(IFormFile archivo)
     {
+        HttpContext.Session.SetString("active", "1");
+
         if (archivo == null || archivo.Length == 0)
         {
             TempData["Error"] = "No se seleccionó ningún archivo.";
@@ -150,7 +170,7 @@ public class HomeController : Controller
         }
         catch (Exception ex)
         {
-            TempData["Error"] = $"Error al procesar el archivo '{archivo.FileName}': {ex.Message}";
+            TempData["Error"] = $"Error al procesar '{archivo.FileName}': {ex.Message}";
             return RedirectToAction(nameof(Index));
         }
         finally
@@ -161,11 +181,11 @@ public class HomeController : Controller
 
         if (nuevos.Count == 0)
         {
-            TempData["Error"] = $"No se pudieron leer registros desde '{archivo.FileName}'. Verifica el formato.";
+            TempData["Error"] = $"No se pudieron leer registros desde '{archivo.FileName}'.";
             return RedirectToAction(nameof(Index));
         }
 
-        _store.Agregar(nuevos, tipo);
+        Store.Agregar(nuevos, tipo);
         TempData["Ok"] = $"✅ {nuevos.Count} registros cargados desde {archivo.FileName}";
         return RedirectToAction(nameof(Index));
     }
@@ -175,7 +195,7 @@ public class HomeController : Controller
     {
         try
         {
-            var datos = _store.ObtenerTodos();
+            var datos = Store.ObtenerTodos();
             if (datos.Count == 0)
             {
                 TempData["Error"] = "No hay datos para descargar.";
@@ -213,7 +233,7 @@ public class HomeController : Controller
     {
         try
         {
-            var stats = _store.Estadisticas();
+            var stats = Store.Estadisticas();
             byte[] contenido = ExportService.ExportarEstadisticasCsv(stats);
             string nombre = $"estadisticas_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.csv";
             return File(contenido, "text/csv; charset=utf-8", nombre);
@@ -228,7 +248,7 @@ public class HomeController : Controller
     [HttpGet("/api/chartdata")]
     public IActionResult ChartData()
     {
-        var stats = _store.Estadisticas();
+        var stats = Store.Estadisticas();
         var data = stats.Values
             .OrderByDescending(s => s.SumaValores)
             .Take(12)
