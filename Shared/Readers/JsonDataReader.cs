@@ -8,8 +8,8 @@ public static class JsonDataReader
     private static readonly string[] _nombreKeys = { "nombre", "name", "titulo", "title", "producto", "juego", "descripcion", "description", "player", "jugador" };
     private static readonly string[] _categoriaKeys = { "categoria", "category", "genero", "genre", "tipo", "type", "grupo", "group", "departamento", "department", "nivel", "level" };
     private static readonly string[] _valorKeys = { "valor", "value", "precio", "price", "monto", "amount", "score", "puntos", "points", "salario", "salary", "total", "suma" };
-    private static readonly string[] _fechaKeys = { "fecha", "date", "releasedate", "fecha_lanzamiento", "fecha_registro", "created_at", "updated_at", "timestamp" };
-    private static readonly string[] _idKeys = { "id", "Id", "ID", "codigo", "code", "sku" };
+    private static readonly string[] _fechaKeys = { "fecha", "date", "releasedate", "fecha_lanzamiento", "fecha_registro", "created_at", "updated_at", "timestamp", "periodo" };
+    private static readonly string[] _idKeys = { "id", "Id", "ID", "_id", "codigo", "code", "sku" };
 
     public static List<string> UltimasColumnas { get; private set; } = new();
     public static Dictionary<string, string> MapeoColumnas { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -33,54 +33,72 @@ public static class JsonDataReader
             using var documento = JsonDocument.Parse(contenido);
             var raiz = documento.RootElement;
 
-            var elementos = raiz.ValueKind == JsonValueKind.Array
-                ? raiz.EnumerateArray().ToList()
-                : new List<JsonElement> { raiz };
-
-            if (elementos.Count > 0)
-                DetectarMetadatos(elementos[0]);
-
-            int contadorId = 1;
-            foreach (var el in elementos)
+            // ── Formato fields/records ────────────────────────────────────
+            // { "fields": [{"id":"col1","type":"text"}, ...], "records": [[v1,v2,...], ...] }
+            if (raiz.ValueKind == JsonValueKind.Object &&
+                raiz.TryGetProperty("fields", out var fieldsEl) &&
+                raiz.TryGetProperty("records", out var recordsEl) &&
+                fieldsEl.ValueKind == JsonValueKind.Array &&
+                recordsEl.ValueKind == JsonValueKind.Array)
             {
-                try
+                lista.AddRange(LeerFieldsRecords(fieldsEl, recordsEl));
+            }
+            // ── Objeto envuelto: { "data": [...] } o { "results": [...] } ─
+            else if (raiz.ValueKind == JsonValueKind.Object)
+            {
+                // Buscar la primera propiedad que sea un array de objetos
+                JsonElement? arrayEncontrado = null;
+                foreach (var prop in raiz.EnumerateObject())
                 {
-                    var item = new DataItem { Fuente = "json" };
-
-                    item.Id = LeerEntero(el, _idKeys) ?? contadorId;
-                    item.Nombre = LeerCadena(el, _nombreKeys) ?? FallbackPrimeraString(el, _idKeys) ?? $"Item-{contadorId}";
-                    item.Categoria = LeerCadena(el, _categoriaKeys) ?? FallbackPrimeraString(el, _idKeys, _nombreKeys) ?? "Sin categoría";
-                    item.Valor = LeerDouble(el, _valorKeys) ?? FallbackPrimerNumero(el, _idKeys) ?? 0.0;
-                    item.Fecha = LeerFecha(el, _fechaKeys) ?? DateTime.Now;
-
-                    var usadas = new HashSet<string>(_idKeys.Concat(_nombreKeys).Concat(_categoriaKeys)
-                                                           .Concat(_valorKeys).Concat(_fechaKeys),
-                                                    StringComparer.OrdinalIgnoreCase);
-                    foreach (var prop in el.EnumerateObject())
+                    if (prop.Value.ValueKind == JsonValueKind.Array)
                     {
-                        if (usadas.Contains(prop.Name)) continue;
-
+                        // Verificar que sea fields/records anidado
                         if (prop.Value.ValueKind == JsonValueKind.Array)
                         {
-                            var arr = prop.Value.EnumerateArray()
-                                .Select(e => e.GetString() ?? e.ToString())
-                                .Where(s => !string.IsNullOrWhiteSpace(s))
-                                .ToList();
-                            item.CamposExtra[prop.Name] = string.Join(", ", arr);
+                            // Intentar fields/records anidado
+                            if (prop.Name.Equals("data", StringComparison.OrdinalIgnoreCase) ||
+                                prop.Name.Equals("results", StringComparison.OrdinalIgnoreCase) ||
+                                prop.Name.Equals("items", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var inner = prop.Value;
+                                if (inner.ValueKind == JsonValueKind.Object &&
+                                    inner.TryGetProperty("fields", out var f2) &&
+                                    inner.TryGetProperty("records", out var r2))
+                                {
+                                    lista.AddRange(LeerFieldsRecords(f2, r2));
+                                    break;
+                                }
+                            }
                         }
-                        else
-                        {
-                            item.CamposExtra[prop.Name] = prop.Value.ToString();
-                        }
+                        arrayEncontrado ??= prop.Value;
                     }
-
-                    lista.Add(item);
-                    contadorId++;
                 }
-                catch (Exception exItem)
+
+                if (lista.Count == 0 && arrayEncontrado.HasValue)
                 {
-                    Console.WriteLine($"[JSON] ⚠  Error en elemento #{contadorId}: {exItem.Message}");
-                    contadorId++;
+                    lista.AddRange(LeerArrayObjetos(arrayEncontrado.Value.EnumerateArray().ToList()));
+                }
+                else if (lista.Count == 0)
+                {
+                    // El objeto raíz mismo es un registro
+                    lista.AddRange(LeerArrayObjetos(new List<JsonElement> { raiz }));
+                }
+            }
+            // ── Array plano de objetos ────────────────────────────────────
+            else if (raiz.ValueKind == JsonValueKind.Array)
+            {
+                var elementos = raiz.EnumerateArray().ToList();
+                if (elementos.Count > 0)
+                {
+                    // Verificar si es array de arrays (otro formato tabular)
+                    if (elementos[0].ValueKind == JsonValueKind.Array)
+                    {
+                        lista.AddRange(LeerArrayDeArrays(elementos));
+                    }
+                    else
+                    {
+                        lista.AddRange(LeerArrayObjetos(elementos));
+                    }
                 }
             }
 
@@ -96,7 +114,282 @@ public static class JsonDataReader
         return lista;
     }
 
-    private static void DetectarMetadatos(JsonElement primerElemento)
+    // ══════════════════════════════════════════════════════════════
+    //  FORMATO fields/records
+    //  { "fields": [{"id":"col","type":"text"}, ...],
+    //    "records": [[v1,v2,...], [v1,v2,...]] }
+    // ══════════════════════════════════════════════════════════════
+    private static List<DataItem> LeerFieldsRecords(JsonElement fieldsEl, JsonElement recordsEl)
+    {
+        var lista = new List<DataItem>();
+
+        // Extraer nombres de columna desde fields
+        var columnas = new List<string>();
+        foreach (var f in fieldsEl.EnumerateArray())
+        {
+            string colName = "";
+            if (f.ValueKind == JsonValueKind.Object)
+            {
+                // Puede ser {"id":"col","type":"text"} o {"name":"col"} o simplemente "col"
+                if (f.TryGetProperty("id", out var idProp))
+                    colName = idProp.GetString() ?? "";
+                else if (f.TryGetProperty("name", out var nameProp))
+                    colName = nameProp.GetString() ?? "";
+                else if (f.TryGetProperty("label", out var labelProp))
+                    colName = labelProp.GetString() ?? "";
+            }
+            else if (f.ValueKind == JsonValueKind.String)
+            {
+                colName = f.GetString() ?? "";
+            }
+            columnas.Add(colName);
+        }
+
+        if (columnas.Count == 0) return lista;
+
+        // Publicar metadatos
+        UltimasColumnas = new List<string>(columnas);
+        MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        DetectarMapeoDesdeColumnas(columnas);
+
+        // Índices de campos estándar
+        int idxId = EncontrarIndice(columnas, _idKeys);
+        int idxNombre = EncontrarIndice(columnas, _nombreKeys);
+        int idxCat = EncontrarIndice(columnas, _categoriaKeys);
+        int idxValor = EncontrarIndice(columnas, _valorKeys);
+        int idxFecha = EncontrarIndice(columnas, _fechaKeys);
+
+        int contador = 1;
+        foreach (var row in recordsEl.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Array) continue;
+
+            var vals = row.EnumerateArray().ToList();
+            var item = new DataItem { Fuente = "json" };
+
+            item.Id = ObtenerInt(vals, idxId) ?? contador;
+            item.Nombre = ObtenerStr(vals, idxNombre) ?? $"Registro-{contador}";
+            item.Categoria = ObtenerStr(vals, idxCat) ?? "";
+            item.Valor = ObtenerDouble(vals, idxValor) ?? 0;
+            item.Fecha = ObtenerFecha(vals, idxFecha) ?? DateTime.Now;
+
+            // Resto de columnas → CamposExtra
+            var usados = new HashSet<int>(
+                new[] { idxId, idxNombre, idxCat, idxValor, idxFecha }.Where(x => x >= 0));
+
+            for (int c = 0; c < columnas.Count && c < vals.Count; c++)
+            {
+                if (usados.Contains(c)) continue;
+                item.CamposExtra[columnas[c]] = vals[c].ToString();
+            }
+
+            lista.Add(item);
+            contador++;
+        }
+
+        return lista;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  FORMATO array de arrays (primera fila = encabezados opcional)
+    //  [[col1,col2,...],[v1,v2,...],[v1,v2,...]]
+    // ══════════════════════════════════════════════════════════════
+    private static List<DataItem> LeerArrayDeArrays(List<JsonElement> elementos)
+    {
+        var lista = new List<DataItem>();
+        if (elementos.Count == 0) return lista;
+
+        // Determinar si la primera fila son encabezados (todos strings)
+        var primeraFila = elementos[0].EnumerateArray().ToList();
+        bool esEncabezado = primeraFila.All(e => e.ValueKind == JsonValueKind.String);
+
+        List<string> columnas;
+        int inicioFila;
+
+        if (esEncabezado)
+        {
+            columnas = primeraFila.Select(e => e.GetString() ?? "").ToList();
+            inicioFila = 1;
+        }
+        else
+        {
+            columnas = Enumerable.Range(0, primeraFila.Count).Select(i => $"col{i + 1}").ToList();
+            inicioFila = 0;
+        }
+
+        UltimasColumnas = new List<string>(columnas);
+        MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        DetectarMapeoDesdeColumnas(columnas);
+
+        int idxId = EncontrarIndice(columnas, _idKeys);
+        int idxNombre = EncontrarIndice(columnas, _nombreKeys);
+        int idxCat = EncontrarIndice(columnas, _categoriaKeys);
+        int idxValor = EncontrarIndice(columnas, _valorKeys);
+        int idxFecha = EncontrarIndice(columnas, _fechaKeys);
+
+        int contador = 1;
+        for (int r = inicioFila; r < elementos.Count; r++)
+        {
+            var vals = elementos[r].EnumerateArray().ToList();
+            var item = new DataItem { Fuente = "json" };
+
+            item.Id = ObtenerInt(vals, idxId) ?? contador;
+            item.Nombre = ObtenerStr(vals, idxNombre) ?? $"Registro-{contador}";
+            item.Categoria = ObtenerStr(vals, idxCat) ?? "";
+            item.Valor = ObtenerDouble(vals, idxValor) ?? 0;
+            item.Fecha = ObtenerFecha(vals, idxFecha) ?? DateTime.Now;
+
+            var usados = new HashSet<int>(
+                new[] { idxId, idxNombre, idxCat, idxValor, idxFecha }.Where(x => x >= 0));
+
+            for (int c = 0; c < columnas.Count && c < vals.Count; c++)
+            {
+                if (usados.Contains(c)) continue;
+                item.CamposExtra[columnas[c]] = vals[c].ToString();
+            }
+
+            lista.Add(item);
+            contador++;
+        }
+
+        return lista;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  FORMATO array de objetos (comportamiento original)
+    // ══════════════════════════════════════════════════════════════
+    private static List<DataItem> LeerArrayObjetos(List<JsonElement> elementos)
+    {
+        var lista = new List<DataItem>();
+        if (elementos.Count == 0) return lista;
+
+        if (elementos[0].ValueKind == JsonValueKind.Object)
+            DetectarMetadatosObjeto(elementos[0]);
+
+        int contadorId = 1;
+        foreach (var el in elementos)
+        {
+            if (el.ValueKind != JsonValueKind.Object) continue;
+            try
+            {
+                var item = new DataItem { Fuente = "json" };
+
+                item.Id = LeerEntero(el, _idKeys) ?? contadorId;
+                item.Nombre = LeerCadena(el, _nombreKeys) ?? FallbackPrimeraString(el, _idKeys) ?? $"Item-{contadorId}";
+                item.Categoria = LeerCadena(el, _categoriaKeys) ?? FallbackPrimeraString(el, _idKeys, _nombreKeys) ?? "";
+                item.Valor = LeerDouble(el, _valorKeys) ?? FallbackPrimerNumero(el, _idKeys) ?? 0.0;
+                item.Fecha = LeerFecha(el, _fechaKeys) ?? DateTime.Now;
+
+                var usadas = new HashSet<string>(_idKeys.Concat(_nombreKeys).Concat(_categoriaKeys)
+                                                       .Concat(_valorKeys).Concat(_fechaKeys),
+                                                StringComparer.OrdinalIgnoreCase);
+                foreach (var prop in el.EnumerateObject())
+                {
+                    if (usadas.Contains(prop.Name)) continue;
+
+                    if (prop.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        var arr = prop.Value.EnumerateArray()
+                            .Select(e => e.GetString() ?? e.ToString())
+                            .Where(s => !string.IsNullOrWhiteSpace(s))
+                            .ToList();
+                        item.CamposExtra[prop.Name] = string.Join(", ", arr);
+                    }
+                    else
+                    {
+                        item.CamposExtra[prop.Name] = prop.Value.ToString();
+                    }
+                }
+
+                lista.Add(item);
+                contadorId++;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[JSON] ⚠  Error en elemento #{contadorId}: {ex.Message}");
+                contadorId++;
+            }
+        }
+
+        return lista;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  HELPERS – índices y valores para arrays posicionales
+    // ══════════════════════════════════════════════════════════════
+
+    private static int EncontrarIndice(List<string> columnas, string[] aliases)
+    {
+        foreach (var alias in aliases)
+            for (int i = 0; i < columnas.Count; i++)
+                if (string.Equals(columnas[i], alias, StringComparison.OrdinalIgnoreCase))
+                    return i;
+        return -1;
+    }
+
+    private static string? ObtenerStr(List<JsonElement> vals, int idx)
+    {
+        if (idx < 0 || idx >= vals.Count) return null;
+        var v = vals[idx];
+        if (v.ValueKind == JsonValueKind.String) return v.GetString();
+        if (v.ValueKind == JsonValueKind.Null) return null;
+        return v.ToString();
+    }
+
+    private static int? ObtenerInt(List<JsonElement> vals, int idx)
+    {
+        if (idx < 0 || idx >= vals.Count) return null;
+        var v = vals[idx];
+        if (v.TryGetInt32(out int i)) return i;
+        if (int.TryParse(v.ToString(), out int i2)) return i2;
+        return null;
+    }
+
+    private static double? ObtenerDouble(List<JsonElement> vals, int idx)
+    {
+        if (idx < 0 || idx >= vals.Count) return null;
+        var v = vals[idx];
+        if (v.TryGetDouble(out double d)) return d;
+        if (double.TryParse(v.ToString(), System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out double d2)) return d2;
+        return null;
+    }
+
+    private static DateTime? ObtenerFecha(List<JsonElement> vals, int idx)
+    {
+        if (idx < 0 || idx >= vals.Count) return null;
+        string s = vals[idx].ValueKind == JsonValueKind.String
+            ? vals[idx].GetString() ?? ""
+            : vals[idx].ToString();
+        return DateTime.TryParse(s, out DateTime d) ? d : null;
+    }
+
+    private static void DetectarMapeoDesdeColumnas(List<string> columnas)
+    {
+        MapeoColumnas.Clear();
+
+        string? Find(string[] aliases)
+        {
+            foreach (var a in aliases)
+                foreach (var c in columnas)
+                    if (string.Equals(c, a, StringComparison.OrdinalIgnoreCase))
+                        return c;
+            return null;
+        }
+
+        string? c;
+        c = Find(_idKeys); if (c != null) MapeoColumnas[c] = "id";
+        c = Find(_nombreKeys); if (c != null) MapeoColumnas[c] = "nombre";
+        c = Find(_categoriaKeys); if (c != null) MapeoColumnas[c] = "categoria";
+        c = Find(_valorKeys); if (c != null) MapeoColumnas[c] = "valor";
+        c = Find(_fechaKeys); if (c != null) MapeoColumnas[c] = "fecha";
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  HELPERS – objetos (formato original)
+    // ══════════════════════════════════════════════════════════════
+
+    private static void DetectarMetadatosObjeto(JsonElement primerElemento)
     {
         var todasProps = new List<string>();
         foreach (var prop in primerElemento.EnumerateObject())
@@ -212,7 +505,7 @@ public static class JsonDataReader
                 if (DateTime.TryParse(p.GetString(), out DateTime d)) return d;
         return null;
     }
-    ///tggg
+
     private static string? FallbackPrimeraString(JsonElement el, params string[][] excluidos)
     {
         var exc = new HashSet<string>(excluidos.SelectMany(a => a), StringComparer.OrdinalIgnoreCase);

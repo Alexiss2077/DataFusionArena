@@ -4,30 +4,12 @@ using System.Text;
 
 namespace DataFusionArena.Shared.Readers;
 
-/// <summary>
-/// Lector TXT robusto: detecta separador y encabezado automáticamente,
-/// mapea columnas por coincidencia flexible (exacta → inicia con),
-/// soporta campos entre comillas y almacena TODOS los campos en CamposExtra
-/// para acceso confiable por nombre original.
-///
-/// ▸ Se eliminó el paso "contains" del mapeo de columnas: era demasiado
-///   agresivo y provocaba que columnas arbitrarias (p. ej. "employee_name")
-///   se asignaran incorrectamente a roles estándar de DataItem.
-/// ▸ Se añadió soporte de campos entre comillas en Separar().
-/// ▸ Se añadió limpieza de BOM UTF-8 en la primera fila.
-/// ▸ El método Leer() ahora normaliza valores numéricos antes de guardar
-///   en CamposExtra para que el valor mostrado coincida exactamente con
-///   lo que aparece en el archivo original.
-/// </summary>
 public static class TxtDataReader
 {
     public static List<string> UltimasColumnas { get; private set; } = new();
     public static Dictionary<string, string> MapeoColumnas { get; private set; } =
         new(StringComparer.OrdinalIgnoreCase);
 
-    // ── Aliases para campos estándar de DataItem ─────────────────
-    // REGLA: solo exacto y "empieza con"; el paso "contains" se eliminó
-    // porque producía falsos positivos con nombres de columna arbitrarios.
     private static readonly string[] _idAlias = {
         "id", "#", "num", "numero", "número", "index", "idx",
         "codigo", "código", "code", "no", "nro", "rank"
@@ -58,9 +40,6 @@ public static class TxtDataReader
         "release", "publicacion", "publicación", "lanzamiento"
     };
 
-    // ════════════════════════════════════════════════════════════
-    //  LECTURA PRINCIPAL
-    // ════════════════════════════════════════════════════════════
     public static List<DataItem> Leer(string rutaArchivo)
     {
         var lista = new List<DataItem>();
@@ -75,31 +54,25 @@ public static class TxtDataReader
 
         try
         {
-            // Leer con detección automática de encoding (maneja UTF-8 BOM, Latin-1, etc.)
             var lineas = File.ReadAllLines(rutaArchivo, DetectarEncoding(rutaArchivo))
                 .Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith('#'))
                 .ToArray();
 
             if (lineas.Length == 0) return lista;
 
-            // 1. Detectar separador
             char sep = DetectarSeparador(lineas);
 
-            // 2. Detectar encabezado (la primera línea útil, sin BOM)
             string primeraLinea = QuitarBom(lineas[0]);
             string[] primeraFila = Separar(primeraLinea, sep);
             bool tieneEncabezado = EsEncabezado(primeraFila);
             int inicio = tieneEncabezado ? 1 : 0;
 
-            // 3. Construir headers (sin BOM, sin comillas extra)
             string[] headers = tieneEncabezado
                 ? primeraFila.Select(h => h.Trim().Trim('"').Trim()).ToArray()
                 : Enumerable.Range(1, primeraFila.Length).Select(i => $"col{i}").ToArray();
 
-            // 4. Mapear headers → campos DataItem (solo exacto + empieza-con)
             int[] mapa = MapearColumnas(headers);
 
-            // 5. Guardar metadatos para consola y WinForms
             UltimasColumnas = headers.ToList();
             MapeoColumnas.Clear();
             if (mapa[0] >= 0 && mapa[0] < headers.Length) MapeoColumnas[headers[mapa[0]]] = "id";
@@ -108,11 +81,6 @@ public static class TxtDataReader
             if (mapa[3] >= 0 && mapa[3] < headers.Length) MapeoColumnas[headers[mapa[3]]] = "valor";
             if (mapa[4] >= 0 && mapa[4] < headers.Length) MapeoColumnas[headers[mapa[4]]] = "fecha";
 
-            Console.WriteLine($"[TXT] Sep='{EscapeSep(sep)}' | Encabezado={tieneEncabezado}" +
-                $" | Columnas={headers.Length}" +
-                $" | id@{mapa[0]} nombre@{mapa[1]} cat@{mapa[2]} val@{mapa[3]} fecha@{mapa[4]}");
-
-            // 6. Leer filas
             int rowNum = 0;
             for (int i = inicio; i < lineas.Length; i++)
             {
@@ -124,15 +92,12 @@ public static class TxtDataReader
 
                     var item = new DataItem { Fuente = "txt" };
 
-                    // Campos estándar (best-effort)
                     item.Id = ValorInt(cols, mapa[0]) ?? rowNum;
                     item.Nombre = ValorStr(cols, mapa[1]) ?? $"Fila-{rowNum}";
                     item.Categoria = ValorStr(cols, mapa[2]) ?? "";
                     item.Valor = ValorDouble(cols, mapa[3]) ?? 0;
                     item.Fecha = ValorFecha(cols, mapa[4]) ?? DateTime.Now;
 
-                    // TODOS los campos → CamposExtra con valor RAW original
-                    // Esto permite mostrar el valor exacto del archivo sin reformatear.
                     for (int c = 0; c < headers.Length; c++)
                     {
                         string key = headers[c].ToLowerInvariant();
@@ -158,12 +123,8 @@ public static class TxtDataReader
         return lista;
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  DETECCIÓN DE ENCODING
-    // ════════════════════════════════════════════════════════════
     private static Encoding DetectarEncoding(string ruta)
     {
-        // Leer los primeros bytes para detectar BOM
         try
         {
             byte[] bom = new byte[4];
@@ -176,20 +137,13 @@ public static class TxtDataReader
         return Encoding.UTF8;
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  LIMPIEZA DE BOM EN STRING
-    // ════════════════════════════════════════════════════════════
     private static string QuitarBom(string linea)
     {
-        // Quitar BOM U+FEFF si quedó como carácter al inicio
         if (linea.Length > 0 && linea[0] == '\uFEFF')
             return linea[1..];
         return linea;
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  DETECCIÓN DE SEPARADOR
-    // ════════════════════════════════════════════════════════════
     private static char DetectarSeparador(string[] lineas)
     {
         char[] candidatos = { '|', '\t', ';', ',' };
@@ -211,7 +165,6 @@ public static class TxtDataReader
         return mejor;
     }
 
-    /// <summary>Cuenta separadores ignorando los que están dentro de comillas.</summary>
     private static int ContarSeparadores(string linea, char sep)
     {
         int count = 0;
@@ -224,23 +177,17 @@ public static class TxtDataReader
         return count;
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  DETECCIÓN DE ENCABEZADO
-    // ════════════════════════════════════════════════════════════
     private static bool EsEncabezado(string[] tokens)
     {
         if (tokens.Length == 0) return false;
 
         string primero = tokens[0].Trim().TrimStart('\uFEFF').ToLower();
 
-        // Señales inequívocas de encabezado
         if (primero is "id" or "#" or "num" or "index" or "idx") return true;
 
-        // Si el primer token es puramente numérico → datos, no encabezado
         if (double.TryParse(tokens[0].Trim(), NumberStyles.Any,
             CultureInfo.InvariantCulture, out _)) return false;
 
-        // Mayoría de tokens parecen etiquetas (texto sin números ni fechas ISO)
         int parecenEtiqueta = tokens.Count(t =>
         {
             string s = t.Trim().Trim('"');
@@ -254,12 +201,6 @@ public static class TxtDataReader
         return parecenEtiqueta >= Math.Max(1, tokens.Length * 0.55);
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  MAPEO FLEXIBLE: exacto → empieza con
-    //  ⚠ Se ELIMINÓ el paso "contains" (era demasiado agresivo).
-    //    Ejemplo problemático: "employee_name" contiene "name" → se mapeaba
-    //    a "nombre" aunque el campo sea un identificador compuesto.
-    // ════════════════════════════════════════════════════════════
     private static int[] MapearColumnas(string[] headers)
     {
         string[] lower = headers.Select(h => h.ToLowerInvariant().Trim().Trim('"')).ToArray();
@@ -267,16 +208,14 @@ public static class TxtDataReader
 
         int Buscar(string[] alias)
         {
-            // Pasada 1: exacta
             foreach (string a in alias)
                 for (int i = 0; i < lower.Length; i++)
                     if (!usados.Contains(i) && lower[i] == a)
                     { usados.Add(i); return i; }
 
-            // Pasada 2: empieza con (solo si el alias es suficientemente largo)
             foreach (string a in alias)
             {
-                if (a.Length < 3) continue; // evitar falsos positivos con alias cortos
+                if (a.Length < 3) continue;
                 for (int i = 0; i < lower.Length; i++)
                     if (!usados.Contains(i) && lower[i].StartsWith(a + "_", StringComparison.Ordinal))
                     { usados.Add(i); return i; }
@@ -295,9 +234,6 @@ public static class TxtDataReader
         };
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  SEPARAR CAMPOS  (soporta comillas como en CSV)
-    // ════════════════════════════════════════════════════════════
     private static string[] Separar(string linea, char sep)
     {
         var campos = new List<string>();
@@ -310,11 +246,10 @@ public static class TxtDataReader
 
             if (c == '"')
             {
-                // Comilla doble escapada dentro de campo entre comillas
                 if (enComillas && i + 1 < linea.Length && linea[i + 1] == '"')
                 {
                     actual.Append('"');
-                    i++; // saltar la segunda comilla
+                    i++;
                 }
                 else
                 {
@@ -337,9 +272,6 @@ public static class TxtDataReader
         return campos.ToArray();
     }
 
-    // ════════════════════════════════════════════════════════════
-    //  HELPERS DE PARSEO
-    // ════════════════════════════════════════════════════════════
     private static int? ValorInt(string[] cols, int idx)
     {
         if (idx < 0 || idx >= cols.Length) return null;
@@ -368,7 +300,6 @@ public static class TxtDataReader
         string s = cols[idx].Trim().Trim('"');
         if (string.IsNullOrEmpty(s)) return null;
 
-        // Año solo (4 dígitos)
         if (s.Length == 4 && int.TryParse(s, out int anio) && anio >= 1900 && anio <= 2200)
             return new DateTime(anio, 1, 1);
 
@@ -382,11 +313,4 @@ public static class TxtDataReader
 
         return DateTime.TryParse(s, out DateTime dt2) ? dt2 : null;
     }
-
-    private static string EscapeSep(char sep) => sep switch
-    {
-        '\t' => "TAB",
-        ' ' => "SPACE",
-        _ => sep.ToString()
-    };
 }

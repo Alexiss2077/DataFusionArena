@@ -1,3 +1,4 @@
+using System.Xml;
 using System.Xml.Linq;
 using DataFusionArena.Shared.Models;
 
@@ -6,13 +7,35 @@ namespace DataFusionArena.Shared.Readers;
 public static class XmlDataReader
 {
     public static List<string> UltimasColumnas { get; private set; } = new();
-    public static Dictionary<string, string> MapeoColumnas { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+    public static Dictionary<string, string> MapeoColumnas { get; private set; } =
+        new(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly string[] _idAliases = { "id", "Id", "ID" };
-    private static readonly string[] _nombreAliases = { "nombre", "name", "titulo", "title" };
-    private static readonly string[] _categoriaAliases = { "categoria", "category", "departamento", "department" };
-    private static readonly string[] _valorAliases = { "valor", "value", "salario", "salary" };
-    private static readonly string[] _fechaAliases = { "fecha", "date", "fechaContratacion", "hireDate" };
+    private static readonly string[] _idAliases = {
+        "_id", "id", "Id", "ID", "codigo", "code", "num", "numero", "idx", "index", "rank", "no"
+    };
+    private static readonly string[] _nombreAliases = {
+        "micrositio", "nombre", "name", "titulo", "title", "descripcion", "description",
+        "jugador", "player", "empleado", "employee", "persona", "person",
+        "producto", "item", "autor", "author", "atleta", "athlete"
+    };
+    private static readonly string[] _categoriaAliases = {
+        "categoria", "category", "departamento", "department",
+        "genero", "genero", "gender", "sexo", "sex",
+        "tipo", "type", "clase", "class", "grupo", "group",
+        "region", "region", "pais", "country", "nivel", "level",
+        "clasificacion", "clasificacion", "division", "segmento", "segment"
+    };
+    private static readonly string[] _valorAliases = {
+        "valor", "value", "salario", "salary", "precio", "price",
+        "score", "puntos", "points", "total", "monto", "amount",
+        "frec", "frecuencia", "frequency", "count", "cantidad",
+        "ventas", "sales", "edad_media", "edad", "age", "promedio", "avg"
+    };
+    private static readonly string[] _fechaAliases = {
+        "periodo", "fecha", "date", "fechaContratacion", "hireDate",
+        "anio", "year", "period",
+        "created_at", "updated_at", "timestamp", "fecha_registro"
+    };
 
     public static List<DataItem> Leer(string rutaArchivo)
     {
@@ -22,20 +45,32 @@ public static class XmlDataReader
 
         if (!File.Exists(rutaArchivo))
         {
-            Console.WriteLine($"[XML] ⚠  Archivo no encontrado: {rutaArchivo}");
+            Console.WriteLine($"[XML]  Archivo no encontrado: {rutaArchivo}");
             return lista;
         }
 
         try
         {
-            var doc = XDocument.Load(rutaArchivo);
-            var elementos = doc.Root?.Elements().ToList() ?? new List<XElement>();
+            string contenido = File.ReadAllText(rutaArchivo);
+            contenido = SanitizarTagsConEspacios(contenido);
 
-            if (elementos.Count > 0 && !TieneAtributosOTexto(elementos[0]))
-                elementos = elementos.SelectMany(e => e.Elements()).ToList();
+            var doc = XDocument.Parse(contenido);
+            var root = doc.Root;
+            if (root == null) return lista;
 
-            if (elementos.Count > 0)
-                DetectarMetadatos(elementos[0]);
+            var elementos = ObtenerElementosDatos(root);
+
+            if (elementos.Count == 0)
+            {
+                Console.WriteLine($"[XML]  No se encontraron elementos en {Path.GetFileName(rutaArchivo)}");
+                return lista;
+            }
+
+            DetectarMetadatos(elementos[0]);
+
+            bool faltaCategoria = !MapeoColumnas.ContainsValue("categoria");
+            bool faltaValor = !MapeoColumnas.ContainsValue("valor");
+            bool faltaNombre = !MapeoColumnas.ContainsValue("nombre");
 
             int contador = 1;
             foreach (var el in elementos)
@@ -44,9 +79,9 @@ public static class XmlDataReader
                 {
                     var item = new DataItem { Fuente = "xml" };
 
-                    item.Id = LeerEntero(el, _idAliases) ?? contador;
-                    item.Nombre = LeerCadena(el, _nombreAliases) ?? $"Item-{contador}";
-                    item.Categoria = LeerCadena(el, _categoriaAliases) ?? "Sin categoría";
+                    item.Id = LeerEnteroAtributoOHijo(el, _idAliases) ?? contador;
+                    item.Nombre = LeerCadena(el, _nombreAliases) ?? "";
+                    item.Categoria = LeerCadena(el, _categoriaAliases) ?? "";
                     item.Valor = LeerDouble(el, _valorAliases) ?? 0;
                     item.Fecha = LeerFecha(el, _fechaAliases) ?? DateTime.Now;
 
@@ -62,8 +97,9 @@ public static class XmlDataReader
                     }
                     foreach (var hijo in el.Elements())
                     {
-                        if (mapeadas.Contains(hijo.Name.LocalName)) continue;
-                        item.CamposExtra[hijo.Name.LocalName] = hijo.Value.Trim();
+                        string localName = hijo.Name.LocalName;
+                        if (mapeadas.Contains(localName)) continue;
+                        item.CamposExtra[localName] = hijo.Value.Trim();
                     }
 
                     lista.Add(item);
@@ -71,39 +107,261 @@ public static class XmlDataReader
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[XML] ⚠  Error en elemento #{contador}: {ex.Message}");
+                    Console.WriteLine($"[XML]  Error en elemento #{contador}: {ex.Message}");
                     contador++;
                 }
             }
 
-            Console.WriteLine($"[XML] ✓  {lista.Count} registros leídos desde {Path.GetFileName(rutaArchivo)}");
+            if (lista.Count > 0)
+            {
+                if (faltaCategoria) AplicarHeuristicaCategoria(lista);
+                if (faltaValor) AplicarHeuristicaValor(lista);
+                if (faltaNombre) AplicarHeuristicaNombre(lista);
+            }
+
+            Console.WriteLine($"[XML]  {lista.Count} registros leidos desde {Path.GetFileName(rutaArchivo)}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[XML] ✗  Error leyendo XML: {ex.Message}");
+            Console.WriteLine($"[XML]  Error leyendo XML: {ex.Message}");
         }
 
         return lista;
     }
 
+    // Reemplaza espacios dentro de nombres de tag: <Numero de notas> -> <Numero_de_notas>
+    private static string SanitizarTagsConEspacios(string xml)
+    {
+        var sb = new System.Text.StringBuilder(xml.Length);
+        int i = 0;
+        while (i < xml.Length)
+        {
+            if (xml[i] == '<')
+            {
+                int fin = xml.IndexOf('>', i + 1);
+                if (fin < 0) { sb.Append(xml[i]); i++; continue; }
+
+                string tag = xml.Substring(i, fin - i + 1);
+
+                int nombreInicio = 1;
+                if (tag.Length > 1 && tag[1] == '/') nombreInicio = 2;
+                if (tag.Length > 1 && tag[1] == '?') { sb.Append(tag); i = fin + 1; continue; }
+                if (tag.Length > 3 && tag.StartsWith("<!--")) { sb.Append(tag); i = fin + 1; continue; }
+
+                int nombreFin = nombreInicio;
+                while (nombreFin < tag.Length - 1 && tag[nombreFin] != '>' &&
+                       tag[nombreFin] != '/' && tag[nombreFin] != ' ')
+                    nombreFin++;
+
+                // Hay espacio dentro del nombre del tag
+                if (nombreFin < tag.Length - 1 && tag[nombreFin] == ' ')
+                {
+                    // Buscar hasta donde termina el nombre (siguiente espacio que inicia un atributo o '>')
+                    // Para tags con espacios en el nombre SIN atributos buscamos el '>'
+                    string nombre = tag.Substring(nombreInicio, nombreFin - nombreInicio);
+                    string resto = tag.Substring(nombreFin);
+
+                    // Reemplazar espacios del nombre hasta encontrar '>' o fin
+                    var sbNombre = new System.Text.StringBuilder();
+                    bool dentroNombre = true;
+                    foreach (char c in resto)
+                    {
+                        if (dentroNombre && c == ' ')
+                        {
+                            // Ver si lo que sigue parece nombre de atributo (letra) o cierre
+                            sbNombre.Append('_');
+                        }
+                        else
+                        {
+                            if (c == '>' || c == '/') dentroNombre = false;
+                            sbNombre.Append(c);
+                        }
+                    }
+                    tag = tag.Substring(0, nombreInicio) + nombre + sbNombre.ToString();
+                }
+
+                sb.Append(tag);
+                i = fin + 1;
+            }
+            else
+            {
+                sb.Append(xml[i]);
+                i++;
+            }
+        }
+        return sb.ToString();
+    }
+
+    // Obtiene el nivel correcto de elementos: soporta <root><row> y <root><grupo><row>
+    private static List<XElement> ObtenerElementosDatos(XElement root)
+    {
+        var hijos = root.Elements().ToList();
+        if (hijos.Count == 0) return hijos;
+
+        // Si los hijos tienen atributos o sub-elementos propios son los registros
+        if (hijos[0].Attributes().Any() || hijos[0].Elements().Any())
+            return hijos;
+
+        // Bajar un nivel mas
+        var nietos = hijos.SelectMany(h => h.Elements()).ToList();
+        if (nietos.Count > 0 && (nietos[0].Attributes().Any() || nietos[0].Elements().Any()))
+            return nietos;
+
+        return hijos;
+    }
+
     private static void DetectarMetadatos(XElement primerElemento)
     {
-        var nombresHijos = new List<string>();
-        foreach (var hijo in primerElemento.Elements())
-            nombresHijos.Add(hijo.Name.LocalName);
+        var nombres = new List<string>();
         foreach (var attr in primerElemento.Attributes())
-            if (!nombresHijos.Contains(attr.Name.LocalName))
-                nombresHijos.Add(attr.Name.LocalName);
+            nombres.Add(attr.Name.LocalName);
+        foreach (var hijo in primerElemento.Elements())
+            nombres.Add(hijo.Name.LocalName);
 
         MapeoColumnas.Clear();
         string? c;
-        c = BuscarEnLista(nombresHijos, _idAliases); if (c != null) MapeoColumnas[c] = "id";
-        c = BuscarEnLista(nombresHijos, _nombreAliases); if (c != null) MapeoColumnas[c] = "nombre";
-        c = BuscarEnLista(nombresHijos, _categoriaAliases); if (c != null) MapeoColumnas[c] = "categoria";
-        c = BuscarEnLista(nombresHijos, _valorAliases); if (c != null) MapeoColumnas[c] = "valor";
-        c = BuscarEnLista(nombresHijos, _fechaAliases); if (c != null) MapeoColumnas[c] = "fecha";
+        c = BuscarEnLista(nombres, _idAliases); if (c != null) MapeoColumnas[c] = "id";
+        c = BuscarEnLista(nombres, _nombreAliases); if (c != null) MapeoColumnas[c] = "nombre";
+        c = BuscarEnLista(nombres, _categoriaAliases); if (c != null) MapeoColumnas[c] = "categoria";
+        c = BuscarEnLista(nombres, _valorAliases); if (c != null) MapeoColumnas[c] = "valor";
+        c = BuscarEnLista(nombres, _fechaAliases); if (c != null) MapeoColumnas[c] = "fecha";
 
-        UltimasColumnas = new List<string>(nombresHijos);
+        UltimasColumnas = new List<string>(nombres);
+    }
+
+    private static void AplicarHeuristicaCategoria(List<DataItem> items)
+    {
+        string? k = BuscarMejorClaveCategoria(items);
+        if (k == null) return;
+        foreach (var item in items)
+            if (item.CamposExtra.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v))
+            { item.Categoria = v.Trim(); item.CamposExtra.Remove(k); }
+        MapeoColumnas[k] = "categoria";
+    }
+
+    private static void AplicarHeuristicaValor(List<DataItem> items)
+    {
+        string? k = BuscarMejorClaveNumerica(items);
+        if (k == null) return;
+        foreach (var item in items)
+            if (item.CamposExtra.TryGetValue(k, out var raw) &&
+                double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out double v))
+            { item.Valor = v; item.CamposExtra.Remove(k); }
+        MapeoColumnas[k] = "valor";
+    }
+
+    private static void AplicarHeuristicaNombre(List<DataItem> items)
+    {
+        string? k = BuscarMejorClaveTexto(items, null);
+        if (k == null) return;
+        foreach (var item in items)
+            if (item.CamposExtra.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v) &&
+                item.Nombre.StartsWith("Item-", StringComparison.OrdinalIgnoreCase))
+            { item.Nombre = v.Trim(); item.CamposExtra.Remove(k); }
+        MapeoColumnas[k] = "nombre";
+    }
+
+    private static string? BuscarMejorClaveCategoria(List<DataItem> items)
+    {
+        var candidatos = items.SelectMany(i => i.CamposExtra.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        string? mejor = null; int mejorPuntaje = 0;
+        foreach (var key in candidatos)
+        {
+            int noVacios = 0, noNumericos = 0;
+            var unicos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items)
+            {
+                if (!item.CamposExtra.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                noVacios++; unicos.Add(raw.Trim());
+                if (!double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out _)) noNumericos++;
+            }
+            if (noVacios == 0 || noNumericos < Math.Max(2, noVacios / 2)) continue;
+            if (unicos.Count <= 1 || unicos.Count > Math.Max(2, items.Count / 2)) continue;
+            int puntaje = noVacios + Math.Min(unicos.Count * 2, 30);
+            if (puntaje > mejorPuntaje) { mejorPuntaje = puntaje; mejor = key; }
+        }
+        return mejor;
+    }
+
+    private static string? BuscarMejorClaveNumerica(List<DataItem> items)
+    {
+        var candidatos = items.SelectMany(i => i.CamposExtra.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        string? mejor = null; int mejorPuntaje = 0;
+        foreach (var key in candidatos)
+        {
+            int numericos = 0;
+            foreach (var item in items)
+                if (item.CamposExtra.TryGetValue(key, out var raw) &&
+                    double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out _))
+                    numericos++;
+            if (numericos < Math.Max(2, items.Count / 3)) continue;
+            if (numericos > mejorPuntaje) { mejorPuntaje = numericos; mejor = key; }
+        }
+        return mejor;
+    }
+
+    private static string? BuscarMejorClaveTexto(List<DataItem> items, string? evitar)
+    {
+        var candidatos = items.SelectMany(i => i.CamposExtra.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(k => !string.Equals(k, evitar, StringComparison.OrdinalIgnoreCase)).ToList();
+        string? mejor = null; int mejorPuntaje = 0;
+        foreach (var key in candidatos)
+        {
+            int noVacios = 0, noNumericos = 0;
+            foreach (var item in items)
+            {
+                if (!item.CamposExtra.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+                noVacios++;
+                if (!double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out _)) noNumericos++;
+            }
+            if (noVacios == 0 || noNumericos < Math.Max(2, noVacios / 2)) continue;
+            if (noVacios > mejorPuntaje) { mejorPuntaje = noVacios; mejor = key; }
+        }
+        return mejor;
+    }
+
+    private static string? LeerCadenaAtributoOHijo(XElement el, params string[] claves)
+    {
+        foreach (var c in claves)
+        {
+            var attr = el.Attributes()
+                .FirstOrDefault(a => string.Equals(a.Name.LocalName, c, StringComparison.OrdinalIgnoreCase));
+            if (attr != null && !string.IsNullOrWhiteSpace(attr.Value)) return attr.Value.Trim();
+
+            var hijo = el.Elements()
+                .FirstOrDefault(h => string.Equals(h.Name.LocalName, c, StringComparison.OrdinalIgnoreCase));
+            if (hijo != null && !string.IsNullOrWhiteSpace(hijo.Value)) return hijo.Value.Trim();
+        }
+        return null;
+    }
+
+    private static int? LeerEnteroAtributoOHijo(XElement el, params string[] claves)
+    {
+        var s = LeerCadenaAtributoOHijo(el, claves);
+        return s != null && int.TryParse(s, out int v) ? v : (int?)null;
+    }
+
+    private static string? LeerCadena(XElement el, params string[] claves)
+        => LeerCadenaAtributoOHijo(el, claves);
+
+    private static double? LeerDouble(XElement el, params string[] claves)
+    {
+        var s = LeerCadena(el, claves);
+        return s != null && double.TryParse(s, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : (double?)null;
+    }
+
+    private static DateTime? LeerFecha(XElement el, params string[] claves)
+    {
+        var s = LeerCadena(el, claves);
+        return s != null && DateTime.TryParse(s, out DateTime d) ? d : (DateTime?)null;
     }
 
     private static string? BuscarEnLista(List<string> lista, string[] aliases)
@@ -114,41 +372,4 @@ public static class XmlDataReader
                     return item;
         return null;
     }
-
-    private static bool TieneAtributosOTexto(XElement el)
-        => el.Attributes().Any() || el.Elements().Any() || !string.IsNullOrWhiteSpace(el.Value);
-
-    private static string? LeerCadena(XElement el, params string[] claves)
-    {
-        foreach (var c in claves)
-        {
-            var hijo = el.Element(c) ?? el.Element(c.ToLower()) ?? el.Element(Capitalizar(c));
-            if (hijo != null) return hijo.Value.Trim();
-            var attr = el.Attribute(c);
-            if (attr != null) return attr.Value.Trim();
-        }
-        return null;
-    }
-
-    private static int? LeerEntero(XElement el, params string[] claves)
-    {
-        var s = LeerCadena(el, claves);
-        return s != null && int.TryParse(s, out int v) ? v : (int?)null;
-    }
-
-    private static double? LeerDouble(XElement el, params string[] claves)
-    {
-        var s = LeerCadena(el, claves);
-        return s != null && double.TryParse(s, System.Globalization.NumberStyles.Any,
-               System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : (double?)null;
-    }
-
-    private static DateTime? LeerFecha(XElement el, params string[] claves)
-    {
-        var s = LeerCadena(el, claves);
-        return s != null && DateTime.TryParse(s, out DateTime d) ? d : (DateTime?)null;
-    }
-
-    private static string Capitalizar(string s)
-        => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..];
 }

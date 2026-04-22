@@ -19,6 +19,11 @@ class Program
 
     static readonly string _dirDatos = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SampleData");
 
+    // Ancho máximo de columna para visualización
+    const int MAX_ANCHO_COL = 22;
+    // Ancho máximo total de la tabla en consola (deja margen)
+    const int MAX_ANCHO_TABLA = 200;
+
     static void Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
@@ -129,8 +134,6 @@ class Program
         if (_datos.Count == 0) return;
         var muestra = _datos.Count > 200 ? _datos.Take(200).ToList() : _datos;
 
-        const int MAX_ANCHO = 50;
-
         for (int c = 0; c < _columnas.Count; c++)
         {
             var (display, clave, _) = _columnas[c];
@@ -141,7 +144,7 @@ class Program
                 if (len > maxLen) maxLen = len;
             }
             int minAncho = Math.Max(display.Length, 4);
-            int anchoFinal = maxLen > MAX_ANCHO ? MAX_ANCHO : Math.Max(maxLen, minAncho);
+            int anchoFinal = Math.Max(Math.Min(maxLen, MAX_ANCHO_COL), minAncho);
             _columnas[c] = (display, clave, anchoFinal);
         }
     }
@@ -179,17 +182,48 @@ class Program
         return "";
     }
 
-    // Devuelve los nombres originales del dataset (Display) para mostrar al usuario
     static List<string> ObtenerCamposDisponibles() =>
         _columnas.Select(c => c.Display).ToList();
 
-    // Traduce el Display elegido por el usuario a la Clave interna para DataProcessor
     static string ResolverClave(string displayOClave)
     {
         var col = _columnas.FirstOrDefault(c =>
             string.Equals(c.Display, displayOClave, StringComparison.OrdinalIgnoreCase));
         if (col != default) return col.Clave;
         return displayOClave.ToLowerInvariant();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  GRUPOS DE COLUMNAS PARA PAGINACIÓN HORIZONTAL
+    // ══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Divide _columnas en grupos que caben en MAX_ANCHO_TABLA caracteres de ancho.
+    /// Cada grupo se mostrará como una "página" horizontal separada.
+    /// </summary>
+    static List<List<int>> CalcularGruposColumnas()
+    {
+        var grupos = new List<List<int>>();
+        var grupoActual = new List<int>();
+        int anchoAcumulado = 2; // margen izquierdo "  "
+
+        for (int i = 0; i < _columnas.Count; i++)
+        {
+            int anchoCol = _columnas[i].Ancho + 3; // +3 por " │ "
+            if (grupoActual.Count > 0 && anchoAcumulado + anchoCol > MAX_ANCHO_TABLA)
+            {
+                grupos.Add(grupoActual);
+                grupoActual = new List<int>();
+                anchoAcumulado = 2;
+            }
+            grupoActual.Add(i);
+            anchoAcumulado += anchoCol;
+        }
+
+        if (grupoActual.Count > 0)
+            grupos.Add(grupoActual);
+
+        return grupos;
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -426,7 +460,7 @@ class Program
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  NIVEL 6 – Tabla DINÁMICA
+    //  NIVEL 6 – Tabla DINÁMICA con paginación horizontal
     // ══════════════════════════════════════════════════════════════
 
     static void VerTodos()
@@ -442,59 +476,86 @@ class Program
     {
         if (lista.Count == 0) { Color(ConsoleColor.Yellow, "  Sin registros."); return; }
 
-        int anchoTotal = _columnas.Sum(c => c.Ancho) + (_columnas.Count - 1) * 3 + 2;
-        string sep = new string('─', anchoTotal);
+        var grupos = CalcularGruposColumnas();
+        bool multiGrupo = grupos.Count > 1;
 
-        Console.ForegroundColor = ConsoleColor.DarkCyan;
-        Console.Write("  ");
-        for (int c = 0; c < _columnas.Count; c++)
+        for (int g = 0; g < grupos.Count; g++)
         {
-            var (display, clave, ancho) = _columnas[c];
-            string hdr = display.Length > ancho ? display[..ancho] : display;
-            string celda = clave is "valor" or "id" ? hdr.PadLeft(ancho) : hdr.PadRight(ancho);
-            Console.Write(celda);
-            if (c < _columnas.Count - 1) Console.Write(" │ ");
-        }
-        Console.WriteLine();
-        Console.WriteLine($"  {sep}");
-        Console.ResetColor();
+            var indicesCol = grupos[g];
 
-        int mostrados = 0;
-        foreach (var item in lista)
-        {
-            if (mostrados >= maxFilas)
+            if (multiGrupo)
             {
-                Color(ConsoleColor.Yellow, $"  ... {lista.Count - maxFilas} registros más (mostrando solo {maxFilas}).");
-                break;
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
+                string etiqueta = grupos.Count > 1
+                    ? $"  ── Columnas {indicesCol[0] + 1}–{indicesCol[^1] + 1} de {_columnas.Count} ──"
+                    : "";
+                Console.WriteLine(etiqueta);
+                Console.ResetColor();
             }
 
+            // Calcular ancho total del grupo
+            int anchoTotal = indicesCol.Sum(i => _columnas[i].Ancho) + (indicesCol.Count - 1) * 3 + 2;
+            string sep = new string('─', anchoTotal);
+
+            // Encabezado
+            Console.ForegroundColor = ConsoleColor.DarkCyan;
             Console.Write("  ");
-            for (int c = 0; c < _columnas.Count; c++)
+            for (int ci = 0; ci < indicesCol.Count; ci++)
             {
-                var (_, clave, ancho) = _columnas[c];
-                string val = ObtenerValorCelda(item, clave);
-                if (val.Length > ancho) val = val[..(ancho - 1)] + "…";
-
-                if (clave == "fuente")
-                {
-                    Console.ForegroundColor = FuenteColor(val);
-                    Console.Write(val.PadRight(ancho));
-                    Console.ResetColor();
-                }
-                else if (clave is "valor" or "id")
-                    Console.Write(val.PadLeft(ancho));
-                else
-                    Console.Write(val.PadRight(ancho));
-
-                if (c < _columnas.Count - 1) Console.Write(" │ ");
+                var (display, clave, ancho) = _columnas[indicesCol[ci]];
+                string hdr = display.Length > ancho ? display[..ancho] : display;
+                string celda = clave is "valor" or "id" ? hdr.PadLeft(ancho) : hdr.PadRight(ancho);
+                Console.Write(celda);
+                if (ci < indicesCol.Count - 1) Console.Write(" │ ");
             }
             Console.WriteLine();
-            mostrados++;
-        }
+            Console.WriteLine($"  {sep}");
+            Console.ResetColor();
 
-        Console.ForegroundColor = ConsoleColor.DarkCyan;
-        Console.WriteLine($"  {sep}");
-        Console.ResetColor();
+            // Filas
+            int mostrados = 0;
+            foreach (var item in lista)
+            {
+                if (mostrados >= maxFilas)
+                {
+                    Color(ConsoleColor.Yellow, $"  ... {lista.Count - maxFilas} registros más (mostrando solo {maxFilas}).");
+                    break;
+                }
+
+                Console.Write("  ");
+                for (int ci = 0; ci < indicesCol.Count; ci++)
+                {
+                    var (_, clave, ancho) = _columnas[indicesCol[ci]];
+                    string val = ObtenerValorCelda(item, clave);
+                    if (val.Length > ancho) val = val[..(ancho - 1)] + "…";
+
+                    if (clave == "fuente")
+                    {
+                        Console.ForegroundColor = FuenteColor(val);
+                        Console.Write(val.PadRight(ancho));
+                        Console.ResetColor();
+                    }
+                    else if (clave is "valor" or "id")
+                        Console.Write(val.PadLeft(ancho));
+                    else
+                        Console.Write(val.PadRight(ancho));
+
+                    if (ci < indicesCol.Count - 1) Console.Write(" │ ");
+                }
+                Console.WriteLine();
+                mostrados++;
+            }
+
+            Console.ForegroundColor = ConsoleColor.DarkCyan;
+            Console.WriteLine($"  {sep}");
+            Console.ResetColor();
+
+            if (multiGrupo && g < grupos.Count - 1)
+            {
+                Console.Write("  ENTER para ver más columnas...");
+                Console.ReadLine();
+            }
+        }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -507,7 +568,8 @@ class Program
         var campos = ObtenerCamposDisponibles();
         Console.WriteLine("  Campos disponibles:");
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"  {string.Join(" / ", campos)}");
+        // Mostrar campos en varias líneas si son muchos
+        MostrarListaCampos(campos);
         Console.ResetColor();
         Console.Write("\n  Campo a filtrar: ");
         string campoDisplay = Console.ReadLine()?.Trim() ?? "";
@@ -526,7 +588,7 @@ class Program
         var campos = ObtenerCamposDisponibles();
         Console.WriteLine("  Campos disponibles:");
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"  {string.Join(" / ", campos)}");
+        MostrarListaCampos(campos);
         Console.ResetColor();
         Console.Write("\n  Campo para ordenar: ");
         string campoDisplay = Console.ReadLine()?.Trim() ?? "";
@@ -537,6 +599,21 @@ class Program
         var ordenados = DataProcessor.Ordenar(_datos, campo, asc);
         Color(ConsoleColor.Cyan, $"\n  Ordenado por '{campoDisplay}' {(asc ? "Ascendente ↑" : "Descendente ↓")}\n");
         ImprimirTabla(ordenados);
+    }
+
+    /// <summary>Muestra una lista de campos en columnas para no desbordar la pantalla.</summary>
+    static void MostrarListaCampos(List<string> campos)
+    {
+        const int porLinea = 5;
+        const int anchoCampo = 24;
+        for (int i = 0; i < campos.Count; i++)
+        {
+            if (i % porLinea == 0) Console.Write("  ");
+            string c = campos[i];
+            if (c.Length > anchoCampo - 2) c = c[..(anchoCampo - 3)] + "…";
+            Console.Write(c.PadRight(anchoCampo));
+            if ((i + 1) % porLinea == 0 || i == campos.Count - 1) Console.WriteLine();
+        }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -700,8 +777,6 @@ class Program
             Color(ConsoleColor.Red, $"\n  ❌ Error al exportar: {ex.Message}");
         }
     }
-
-    // ── Helpers de exportación ────────────────────────────────────
 
     static (List<string> columnas, Dictionary<string, string> mapeo) ObtenerInfoExport()
     {
