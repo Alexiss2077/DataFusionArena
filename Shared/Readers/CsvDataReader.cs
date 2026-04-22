@@ -27,12 +27,13 @@ public static class CsvDataReader
 
             if (lineas.Length == 0) return lista;
 
+            // Detectar separador
             if (!lineas[0].Contains(separador) && lineas[0].Contains(';'))
                 separador = ';';
             else if (!lineas[0].Contains(separador) && lineas[0].Contains('\t'))
                 separador = '\t';
 
-            var encabezados = lineas[0].Split(separador)
+            var encabezados = SepararCsvRobust(lineas[0], separador)
                                        .Select(h => h.Trim().ToLowerInvariant().Replace("\"", ""))
                                        .ToArray();
 
@@ -40,35 +41,33 @@ public static class CsvDataReader
             for (int i = 0; i < encabezados.Length; i++)
                 mapa[encabezados[i]] = i;
 
-            UltimasColumnas = lineas[0].Split(separador)
+            UltimasColumnas = SepararCsvRobust(lineas[0], separador)
                                        .Select(h => h.Trim().Replace("\"", ""))
                                        .ToList();
 
-            int idxId = BuscarColumna(mapa, "id", "car_id", "usedcarskuid", "sku_id", "codigo", "code", "sku", "#", "uuid", "guid");
-            int idxNombre = BuscarColumna(mapa, "nombre", "name", "titulo", "title", "producto",
-                                          "juego", "descripcion", "description", "player", "jugador",
-                                          "employee", "empleado", "brand", "marca");
-            int idxCat = BuscarColumna(mapa, "categoria", "category", "genero", "genre", "tipo",
-                                          "type", "grupo", "group", "departamento", "department",
-                                          "nivel", "level", "fuel_type", "transmission");
-            int idxValor = BuscarColumna(mapa, "valor", "value", "precio", "price", "monto",
-                                          "amount", "ventas", "score", "puntos", "points",
-                                          "salario", "salary", "total", "price");
-
+            int idxId = BuscarColumna(mapa,
+                "id", "car_id", "usedcarskuid", "sku_id", "codigo", "code", "sku", "#", "uuid", "guid");
+            int idxNombre = BuscarColumna(mapa,
+                "nombre", "name", "titulo", "title", "producto", "juego", "descripcion",
+                "description", "player", "jugador", "employee", "empleado", "brand", "marca",
+                "model", "modelo", "oem", "dvn", "variant");
+            int idxCat = BuscarColumna(mapa,
+                "categoria", "category", "genero", "genre", "tipo", "type", "grupo", "group",
+                "departamento", "department", "nivel", "level", "fuel_type", "transmission",
+                "fuel", "body", "cartype", "car_type", "utype");
+            int idxValor = BuscarColumna(mapa,
+                "valor", "value", "precio", "price", "monto", "amount", "ventas", "score",
+                "puntos", "points", "salario", "salary", "total", "listed_price", "ip",
+                "discountvalue");
             int idxFecha = BuscarColumnaExacta(mapa,
-                "fecha", "date", "fecha_lanzamiento", "releasedate",
-                "fecha_registro", "created_at", "updated_at", "timestamp", "anio", "model_year");
+                "fecha", "date", "fecha_lanzamiento", "releasedate", "fecha_registro",
+                "created_at", "updated_at", "timestamp", "anio", "model_year", "myear");
 
             var mapeadas = new HashSet<int>(
                 new[] { idxId, idxNombre, idxCat, idxValor, idxFecha }.Where(x => x >= 0));
 
-            // Solo aplicar fallback ciego a id y nombre (posicionales).
-            // Categoría y valor NO usan fallback posicional: asignar una columna
-            // numérica aleatoria a categoría produce resultados incorrectos.
             if (idxId < 0) idxId = SiguienteLibre(mapeadas, encabezados.Length, 0);
             if (idxNombre < 0) idxNombre = SiguienteLibre(mapeadas, encabezados.Length, 0);
-            // idxCat: si no coincidió por alias, se deja en -1 → "Sin categoría"
-            // idxValor: si no coincidió por alias, intentar la primera columna numérica disponible
             if (idxValor < 0) idxValor = BuscarPrimeraNumerica(lineas, encabezados, separador, mapeadas);
 
             MapeoColumnas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -82,39 +81,41 @@ public static class CsvDataReader
             {
                 try
                 {
-                    var cols = SepararCsv(lineas[fila], separador);
+                    var cols = SepararCsvRobust(lineas[fila], separador);
 
                     var item = new DataItem { Fuente = "csv" };
 
-                    // Si el campo id no es numérico (ej. UUID), usar el número de fila
+                    // ID: si es UUID/texto, usar número de fila
                     int parsedId = idxId >= 0 ? ParseInt(cols, idxId) : 0;
                     item.Id = parsedId != 0 ? parsedId : fila;
-                    // Si el id era un UUID/texto, guardarlo en CamposExtra para no perderlo
+
+                    // Guardar UUID original en CamposExtra si no era numérico
                     if (idxId >= 0 && parsedId == 0)
                     {
                         string rawId = Limpiar(cols, idxId);
                         if (!string.IsNullOrEmpty(rawId))
                             item.CamposExtra[encabezados[idxId]] = rawId;
                     }
+
                     item.Nombre = idxNombre >= 0 ? Limpiar(cols, idxNombre) : $"Fila-{fila}";
                     item.Categoria = idxCat >= 0 ? Limpiar(cols, idxCat) : "Sin categoría";
                     item.Valor = idxValor >= 0 ? ParseDouble(cols, idxValor) : 0;
-                    item.Fecha = idxFecha >= 0 ? ParseFechaEspecial(cols, idxFecha, encabezados[idxFecha]) : DateTime.Now;
+                    item.Fecha = idxFecha >= 0
+                        ? ParseFechaEspecial(cols, idxFecha, encabezados[idxFecha])
+                        : DateTime.Now;
 
-                    // Si el id era texto/UUID ya lo guardamos arriba en CamposExtra,
-                    // así que NO lo excluimos del loop de extras (evita duplicado vacío).
-                    // Solo excluir idxId del loop si fue numérico (parsedId != 0).
                     var usadas = new HashSet<int>();
                     if (idxId >= 0 && parsedId != 0) usadas.Add(idxId);
                     if (idxNombre >= 0) usadas.Add(idxNombre);
                     if (idxCat >= 0) usadas.Add(idxCat);
                     if (idxValor >= 0) usadas.Add(idxValor);
                     if (idxFecha >= 0) usadas.Add(idxFecha);
+
                     for (int c = 0; c < encabezados.Length; c++)
                     {
                         if (usadas.Contains(c)) continue;
-                        if (c < cols.Length)
-                            item.CamposExtra[encabezados[c]] = cols[c].Trim().Replace("\"", "");
+                        string val = c < cols.Count ? cols[c].Trim().Replace("\"", "") : "";
+                        item.CamposExtra[encabezados[c]] = val;
                     }
 
                     lista.Add(item);
@@ -135,23 +136,66 @@ public static class CsvDataReader
         return lista;
     }
 
-    private static string[] SepararCsv(string linea, char sep)
+    // ──────────────────────────────────────────────────────────────
+    // Parser robusto: maneja comillas dobles, listas Python ["..."],
+    // y campos con corchetes sin comillas envolventes.
+    // ──────────────────────────────────────────────────────────────
+    private static List<string> SepararCsvRobust(string linea, char sep)
     {
         var campos = new List<string>();
-        bool enComillas = false;
         var actual = new System.Text.StringBuilder();
+        bool enComillas = false;
+        int profCorchete = 0;   // cuenta [ sin cerrar
+        int profLlave = 0;   // cuenta { sin cerrar
 
-        foreach (char c in linea)
+        for (int i = 0; i < linea.Length; i++)
         {
-            if (c == '"') { enComillas = !enComillas; continue; }
-            if (c == sep && !enComillas) { campos.Add(actual.ToString()); actual.Clear(); }
-            else actual.Append(c);
+            char c = linea[i];
+
+            // Cambio de estado de comillas dobles (no afecta si estamos en []/{})
+            if (c == '"' && profCorchete == 0 && profLlave == 0)
+            {
+                enComillas = !enComillas;
+                // Incluir la comilla en el valor para que Limpiar() la quite después
+                actual.Append(c);
+                continue;
+            }
+
+            // Dentro de comillas dobles: copiar literalmente
+            if (enComillas)
+            {
+                actual.Append(c);
+                continue;
+            }
+
+            // Rastrear profundidad de corchetes/llaves fuera de comillas dobles
+            if (c == '[') { profCorchete++; actual.Append(c); continue; }
+            if (c == ']') { profCorchete = Math.Max(0, profCorchete - 1); actual.Append(c); continue; }
+            if (c == '{') { profLlave++; actual.Append(c); continue; }
+            if (c == '}') { profLlave = Math.Max(0, profLlave - 1); actual.Append(c); continue; }
+
+            // Separador real sólo cuando no estamos dentro de ninguna estructura
+            if (c == sep && profCorchete == 0 && profLlave == 0)
+            {
+                campos.Add(actual.ToString());
+                actual.Clear();
+                continue;
+            }
+
+            actual.Append(c);
         }
         campos.Add(actual.ToString());
-        return campos.ToArray();
+        return campos;
     }
 
     private static int BuscarColumna(Dictionary<string, int> mapa, params string[] alias)
+    {
+        foreach (var a in alias)
+            if (mapa.TryGetValue(a, out int idx)) return idx;
+        return -1;
+    }
+
+    private static int BuscarColumnaExacta(Dictionary<string, int> mapa, params string[] alias)
     {
         foreach (var a in alias)
             if (mapa.TryGetValue(a, out int idx)) return idx;
@@ -165,45 +209,42 @@ public static class CsvDataReader
         return -1;
     }
 
-    private static string Limpiar(string[] cols, int idx)
-        => idx >= 0 && idx < cols.Length ? cols[idx].Trim().Replace("\"", "") : "";
+    private static string Limpiar(List<string> cols, int idx)
+        => idx >= 0 && idx < cols.Count ? cols[idx].Trim().Replace("\"", "") : "";
 
-    private static int ParseInt(string[] cols, int idx)
-        => idx >= 0 && idx < cols.Length && int.TryParse(cols[idx].Trim(), out int v) ? v : 0;
+    private static int ParseInt(List<string> cols, int idx)
+        => idx >= 0 && idx < cols.Count && int.TryParse(cols[idx].Trim(), out int v) ? v : 0;
 
-    private static double ParseDouble(string[] cols, int idx)
-        => idx >= 0 && idx < cols.Length && double.TryParse(cols[idx].Trim().Replace("\"", ""),
-           NumberStyles.Any, CultureInfo.InvariantCulture, out double v) ? v : 0;
-
-    private static DateTime ParseFechaEspecial(string[] cols, int idx, string nombreColumna)
+    private static double ParseDouble(List<string> cols, int idx)
     {
-        if (idx < 0 || idx >= cols.Length) return DateTime.Now;
+        if (idx < 0 || idx >= cols.Count) return 0;
+        string s = cols[idx].Trim().Replace("\"", "");
+        // Quitar ".0" flotante si viene como "370000.0"
+        if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out double v))
+            return v;
+        return 0;
+    }
+
+    private static DateTime ParseFechaEspecial(List<string> cols, int idx, string nombreColumna)
+    {
+        if (idx < 0 || idx >= cols.Count) return DateTime.Now;
 
         string valor = cols[idx].Trim();
-        string colLower = nombreColumna.ToLower();
+        string colLow = nombreColumna.ToLower();
 
-        if (colLower is "anio" or "año" or "year" or "model_year")
+        if (colLow is "anio" or "año" or "year" or "model_year" or "myear")
         {
             if (int.TryParse(valor, out int anio))
-                return new DateTime(anio, 1, 1);
+                return new DateTime(Math.Clamp(anio, 1900, 2100), 1, 1);
         }
 
-        if (DateTime.TryParse(valor, out DateTime d))
-            return d;
-
+        if (DateTime.TryParse(valor, out DateTime d)) return d;
         return DateTime.Now;
     }
 
-    private static int BuscarColumnaExacta(Dictionary<string, int> mapa, params string[] alias)
-    {
-        foreach (var a in alias)
-            if (mapa.TryGetValue(a, out int idx)) return idx;
-        return -1;
-    }
-
     /// <summary>
-    /// Busca la primera columna (no ya mapeada) cuyos valores en las primeras filas
-    /// sean mayoritariamente numéricos. Evita asignar columnas de texto a "valor".
+    /// Busca la primera columna no mapeada cuyos valores sean mayoritariamente numéricos.
+    /// Usa SepararCsvRobust para no romper con campos complejos.
     /// </summary>
     private static int BuscarPrimeraNumerica(string[] lineas, string[] encabezados,
         char sep, HashSet<int> mapeadas)
@@ -218,11 +259,11 @@ public static class CsvDataReader
             int numericos = 0;
             for (int fila = 1; fila <= filasMuestra; fila++)
             {
-                var cols = lineas[fila].Split(sep);
-                if (col >= cols.Length) continue;
+                var cols = SepararCsvRobust(lineas[fila], sep);
+                if (col >= cols.Count) continue;
                 string val = cols[col].Trim().Replace("\"", "");
-                if (double.TryParse(val, System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture, out _))
+                if (double.TryParse(val, NumberStyles.Any,
+                    CultureInfo.InvariantCulture, out _))
                     numericos++;
             }
 

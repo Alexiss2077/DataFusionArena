@@ -12,6 +12,9 @@ public class HomeController : Controller
     private readonly DataStore _store;
     private const int PageSize = 20;
 
+    // Límite de tamaño: 200 MB
+    private const long MaxFileSizeBytes = 209_715_200L;
+
     public HomeController(DataStore store) => _store = store;
 
     public IActionResult Index(
@@ -23,7 +26,6 @@ public class HomeController : Controller
         var mapeo = _store.ObtenerMapeo();
         var fuenteDatos = _store.ObtenerFuente();
 
-        // Campo de búsqueda por defecto: primera columna que mapee a "nombre", o la primera
         if (string.IsNullOrEmpty(campo))
         {
             var colNombre = mapeo.FirstOrDefault(kv =>
@@ -36,7 +38,6 @@ public class HomeController : Controller
 
         if (!string.IsNullOrEmpty(busqueda))
         {
-            // Determinar clave interna para filtrar
             string claveInternal = mapeo.TryGetValue(campo, out var mapped)
                 ? mapped.ToLower()
                 : campo.ToLower();
@@ -98,6 +99,8 @@ public class HomeController : Controller
     }
 
     [HttpPost]
+    [RequestSizeLimit(209_715_200)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 209_715_200)]
     public async Task<IActionResult> CargarArchivo(IFormFile archivo)
     {
         if (archivo == null || archivo.Length == 0)
@@ -106,8 +109,15 @@ public class HomeController : Controller
             return RedirectToAction(nameof(Index));
         }
 
+        if (archivo.Length > MaxFileSizeBytes)
+        {
+            TempData["Error"] = $"El archivo supera el límite de 200 MB ({archivo.Length / 1024 / 1024} MB).";
+            return RedirectToAction(nameof(Index));
+        }
+
         var ext = Path.GetExtension(archivo.FileName).ToLowerInvariant();
         var tipo = ext.TrimStart('.');
+
         if (!new[] { ".json", ".csv", ".xml", ".txt" }.Contains(ext))
         {
             TempData["Error"] = $"Formato '{ext}' no soportado. Usa: json, csv, xml, txt";
@@ -120,22 +130,41 @@ public class HomeController : Controller
             await using var fs = System.IO.File.Create(tmp);
             await archivo.CopyToAsync(fs);
         }
-        catch
+        catch (Exception ex)
         {
-            TempData["Error"] = "Error al guardar el archivo temporal.";
+            TempData["Error"] = $"Error al guardar el archivo temporal: {ex.Message}";
             return RedirectToAction(nameof(Index));
         }
 
-        List<DataItem> nuevos = tipo switch
+        List<DataItem> nuevos;
+        try
         {
-            "json" => JsonDataReader.Leer(tmp),
-            "csv" => CsvDataReader.Leer(tmp),
-            "xml" => XmlDataReader.Leer(tmp),
-            "txt" => TxtDataReader.Leer(tmp),
-            _ => new()
-        };
+            nuevos = tipo switch
+            {
+                "json" => JsonDataReader.Leer(tmp),
+                "csv" => CsvDataReader.Leer(tmp),
+                "xml" => XmlDataReader.Leer(tmp),
+                "txt" => TxtDataReader.Leer(tmp),
+                _ => new()
+            };
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = $"Error al procesar el archivo '{archivo.FileName}': {ex.Message}";
+            return RedirectToAction(nameof(Index));
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tmp))
+                System.IO.File.Delete(tmp);
+        }
 
-        System.IO.File.Delete(tmp);
+        if (nuevos.Count == 0)
+        {
+            TempData["Error"] = $"No se pudieron leer registros desde '{archivo.FileName}'. Verifica el formato.";
+            return RedirectToAction(nameof(Index));
+        }
+
         _store.Agregar(nuevos, tipo);
         TempData["Ok"] = $"✅ {nuevos.Count} registros cargados desde {archivo.FileName}";
         return RedirectToAction(nameof(Index));
@@ -186,8 +215,8 @@ public class HomeController : Controller
         {
             var stats = _store.Estadisticas();
             byte[] contenido = ExportService.ExportarEstadisticasCsv(stats);
-            string nombreArchivo = $"estadisticas_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.csv";
-            return File(contenido, "text/csv; charset=utf-8", nombreArchivo);
+            string nombre = $"estadisticas_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.csv";
+            return File(contenido, "text/csv; charset=utf-8", nombre);
         }
         catch (Exception ex)
         {
