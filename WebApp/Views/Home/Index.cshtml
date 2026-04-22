@@ -168,7 +168,7 @@ else
             </a>
         </div>
         <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0">
+            <table class="table table-sm table-hover align-middle mb-0 table-col-sep">
                 <thead>
                     <tr>
                         @foreach (var col in Model.Columnas)
@@ -287,6 +287,24 @@ else
 
 <style>
 .badge-fuente { font-size: .75em; font-weight: 600; padding: 0.4rem 0.6rem; }
+
+/* ── Separadores de columnas ── */
+.table-col-sep thead th {
+    border-right: 1px solid #3a3a58;
+    border-bottom: 2px solid var(--cyan) !important;
+}
+.table-col-sep thead th:last-child {
+    border-right: none;
+}
+.table-col-sep tbody td {
+    border-right: 1px solid #2a2a3c;
+}
+.table-col-sep tbody td:last-child {
+    border-right: none;
+}
+.table-col-sep tbody tr:hover td {
+    border-right-color: #3a3a58;
+}
 
 .btn-success {
     background-color: #00e080 !important;
