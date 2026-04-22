@@ -1,4 +1,4 @@
-using System.Xml;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using DataFusionArena.Shared.Models;
 
@@ -20,12 +20,13 @@ public static class XmlDataReader
     };
     private static readonly string[] _categoriaAliases = {
         "categoria", "category", "departamento", "department",
-        "genero", "genero", "gender", "sexo", "sex",
+        "genero", "gender", "sexo", "sex",
         "tipo", "type", "clase", "class", "grupo", "group",
-        "region", "region", "pais", "country", "nivel", "level",
-        "clasificacion", "clasificacion", "division", "segmento", "segment"
+        "region", "pais", "country", "nivel", "level",
+        "clasificacion", "division", "segmento", "segment"
     };
     private static readonly string[] _valorAliases = {
+        "Numero_de_notas_transmitidas",
         "valor", "value", "salario", "salary", "precio", "price",
         "score", "puntos", "points", "total", "monto", "amount",
         "frec", "frecuencia", "frequency", "count", "cantidad",
@@ -37,6 +38,12 @@ public static class XmlDataReader
         "created_at", "updated_at", "timestamp", "fecha_registro"
     };
 
+    // Regex: captura tags cuyo nombre contiene espacios
+    // Ejemplo: <Numero de notas transmitidas> o </Numero de notas transmitidas>
+    private static readonly Regex _tagConEspacios = new(
+        @"<(/?)\s*([^>\s/""'=]+(?:\s+[^>=/\s""']+)+)\s*(/?)\s*>",
+        RegexOptions.Compiled);
+
     public static List<DataItem> Leer(string rutaArchivo)
     {
         var lista = new List<DataItem>();
@@ -45,14 +52,22 @@ public static class XmlDataReader
 
         if (!File.Exists(rutaArchivo))
         {
-            Console.WriteLine($"[XML]  Archivo no encontrado: {rutaArchivo}");
+            Console.WriteLine($"[XML] Archivo no encontrado: {rutaArchivo}");
             return lista;
         }
 
         try
         {
             string contenido = File.ReadAllText(rutaArchivo);
-            contenido = SanitizarTagsConEspacios(contenido);
+
+            // Reemplazar espacios en nombres de tags ANTES de parsear
+            contenido = _tagConEspacios.Replace(contenido, m =>
+            {
+                string slash1 = m.Groups[1].Value;          // "/" si es cierre
+                string nombre = m.Groups[2].Value.Replace(" ", "_").Trim();
+                string selfClose = m.Groups[3].Value;        // "/" si es self-closing
+                return $"<{slash1}{nombre}{(selfClose == "/" ? "/" : "")}>";
+            });
 
             var doc = XDocument.Parse(contenido);
             var root = doc.Root;
@@ -62,7 +77,7 @@ public static class XmlDataReader
 
             if (elementos.Count == 0)
             {
-                Console.WriteLine($"[XML]  No se encontraron elementos en {Path.GetFileName(rutaArchivo)}");
+                Console.WriteLine($"[XML] No se encontraron elementos en {Path.GetFileName(rutaArchivo)}");
                 return lista;
             }
 
@@ -107,7 +122,7 @@ public static class XmlDataReader
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[XML]  Error en elemento #{contador}: {ex.Message}");
+                    Console.WriteLine($"[XML] Error en elemento #{contador}: {ex.Message}");
                     contador++;
                 }
             }
@@ -119,90 +134,25 @@ public static class XmlDataReader
                 if (faltaNombre) AplicarHeuristicaNombre(lista);
             }
 
-            Console.WriteLine($"[XML]  {lista.Count} registros leidos desde {Path.GetFileName(rutaArchivo)}");
+            Console.WriteLine($"[XML] {lista.Count} registros leidos desde {Path.GetFileName(rutaArchivo)}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[XML]  Error leyendo XML: {ex.Message}");
+            Console.WriteLine($"[XML] Error leyendo XML: {ex.Message}");
         }
 
         return lista;
     }
 
-    // Reemplaza espacios dentro de nombres de tag: <Numero de notas> -> <Numero_de_notas>
-    private static string SanitizarTagsConEspacios(string xml)
-    {
-        var sb = new System.Text.StringBuilder(xml.Length);
-        int i = 0;
-        while (i < xml.Length)
-        {
-            if (xml[i] == '<')
-            {
-                int fin = xml.IndexOf('>', i + 1);
-                if (fin < 0) { sb.Append(xml[i]); i++; continue; }
-
-                string tag = xml.Substring(i, fin - i + 1);
-
-                int nombreInicio = 1;
-                if (tag.Length > 1 && tag[1] == '/') nombreInicio = 2;
-                if (tag.Length > 1 && tag[1] == '?') { sb.Append(tag); i = fin + 1; continue; }
-                if (tag.Length > 3 && tag.StartsWith("<!--")) { sb.Append(tag); i = fin + 1; continue; }
-
-                int nombreFin = nombreInicio;
-                while (nombreFin < tag.Length - 1 && tag[nombreFin] != '>' &&
-                       tag[nombreFin] != '/' && tag[nombreFin] != ' ')
-                    nombreFin++;
-
-                // Hay espacio dentro del nombre del tag
-                if (nombreFin < tag.Length - 1 && tag[nombreFin] == ' ')
-                {
-                    // Buscar hasta donde termina el nombre (siguiente espacio que inicia un atributo o '>')
-                    // Para tags con espacios en el nombre SIN atributos buscamos el '>'
-                    string nombre = tag.Substring(nombreInicio, nombreFin - nombreInicio);
-                    string resto = tag.Substring(nombreFin);
-
-                    // Reemplazar espacios del nombre hasta encontrar '>' o fin
-                    var sbNombre = new System.Text.StringBuilder();
-                    bool dentroNombre = true;
-                    foreach (char c in resto)
-                    {
-                        if (dentroNombre && c == ' ')
-                        {
-                            // Ver si lo que sigue parece nombre de atributo (letra) o cierre
-                            sbNombre.Append('_');
-                        }
-                        else
-                        {
-                            if (c == '>' || c == '/') dentroNombre = false;
-                            sbNombre.Append(c);
-                        }
-                    }
-                    tag = tag.Substring(0, nombreInicio) + nombre + sbNombre.ToString();
-                }
-
-                sb.Append(tag);
-                i = fin + 1;
-            }
-            else
-            {
-                sb.Append(xml[i]);
-                i++;
-            }
-        }
-        return sb.ToString();
-    }
-
-    // Obtiene el nivel correcto de elementos: soporta <root><row> y <root><grupo><row>
+    // Obtiene el nivel correcto: <data><row> -> devuelve los <row>
     private static List<XElement> ObtenerElementosDatos(XElement root)
     {
         var hijos = root.Elements().ToList();
         if (hijos.Count == 0) return hijos;
 
-        // Si los hijos tienen atributos o sub-elementos propios son los registros
         if (hijos[0].Attributes().Any() || hijos[0].Elements().Any())
             return hijos;
 
-        // Bajar un nivel mas
         var nietos = hijos.SelectMany(h => h.Elements()).ToList();
         if (nietos.Count > 0 && (nietos[0].Attributes().Any() || nietos[0].Elements().Any()))
             return nietos;
