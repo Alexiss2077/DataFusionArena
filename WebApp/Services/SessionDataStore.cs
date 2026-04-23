@@ -13,7 +13,7 @@ public class SessionDataStore
     // Diccionario global: sessionId → DataStore del usuario
     private readonly Dictionary<string, DataStore> _sesiones = new();
     private readonly Lock _lock = new();
-
+    
     // Tiempo de expiración de sesión inactiva (2 horas)
     private readonly Dictionary<string, DateTime> _ultimoAcceso = new();
     private readonly TimeSpan _expiracion = TimeSpan.FromHours(2);

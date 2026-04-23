@@ -10,7 +10,6 @@ public class ApiExternaController : Controller
 {
     private readonly IHttpClientFactory _http;
     private readonly SessionDataStore _sessionStore;
-
     private const double Lat = 27.0619;
     private const double Lon = -101.5489;
     private const string Ciudad = "San Buenaventura, México";
