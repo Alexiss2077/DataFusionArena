@@ -1146,8 +1146,9 @@ public partial class MainForm : Form
         lblContadorTodos.Text = "0 registros";
 
         _infoColumnas.Clear();
-        foreach (var col in _colsDefault) _infoColumnas.Add(col);
-        RefrescarComboboxes();
+        cmbCampoBusqueda.Items.Clear();
+        cmbCampoOrden.Items.Clear();
+        cmbLinqCampo?.Items.Clear();
 
         lblTotalRegistros.Text = "0";
         lblTotalCategorias.Text = "0";
