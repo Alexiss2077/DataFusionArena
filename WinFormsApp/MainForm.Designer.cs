@@ -924,13 +924,14 @@ partial class MainForm
         };
         var lblCampoL = FLabel("Campo", new Point(68, 16), clrTextDim);
         lblCampoL.Location = new Point(68, 16);
-        cmbLinqCampo = FCombo(new Point(120, 12), 120, clrSurface2, clrText,
+        cmbLinqCampo = FCombo(new Point(130, 12), 120, clrSurface2, clrText,
             new object[] { }, -1);
-        var lblBuscarL = FLabel("Buscar", new Point(254, 16), clrTextDim);
+        var lblBuscarL = FLabel("Buscar", new Point(268, 16), clrTextDim);
         txtLinqFiltro = new TextBox
         {
-            Location = new Point(300, 12),
-            Width = 180,
+            Location = new Point(322, 12),
+            //Location = new Point(300, 12),
+            Width = 155,
             BackColor = clrSurface2,
             ForeColor = clrText,
             BorderStyle = BorderStyle.FixedSingle,
