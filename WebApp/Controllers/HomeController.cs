@@ -186,7 +186,7 @@ public class HomeController : Controller
         }
 
         Store.Agregar(nuevos, tipo);
-        TempData["Ok"] = $"✅ {nuevos.Count} registros cargados desde {archivo.FileName}";
+        TempData["Ok"] = $" {nuevos.Count} registros cargados desde {archivo.FileName}";
         return RedirectToAction(nameof(Index));
     }
 

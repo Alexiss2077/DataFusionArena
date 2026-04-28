@@ -1,7 +1,7 @@
 @model GraficasViewModel
 @using System.Text.Json
 @{
-    ViewData["Title"] = "Gráficas";
+    ViewData["Title"] = "Análisis";
     var catJson    = JsonSerializer.Serialize(Model.Categorias);
     var totJson    = JsonSerializer.Serialize(Model.Totales);
     var fuenteJson = JsonSerializer.Serialize(Model.Fuentes);
@@ -9,308 +9,245 @@
     var fechasJson = JsonSerializer.Serialize(Model.Fechas);
     var valFecJson = JsonSerializer.Serialize(Model.ValoresFecha);
 
-    var palette = new[]{"#00c8dc","#ffc832","#00e080","#ff5064",
-                        "#b464ff","#ff9632","#00dcc8","#dc50dc",
-                        "#50c850","#6496ff","#ff6e6e","#64ffb4"};
+    var palette = new[] {
+        "#d4ff00","#ff6b35","#3d8bff","#00d48a",
+        "#ff3d6b","#a855f7","#f59e0b","#06b6d4",
+        "#84cc16","#ec4899","#f97316","#14b8a6"
+    };
     var paletteJson = JsonSerializer.Serialize(palette);
 }
 
-<div class="d-flex align-items-center justify-content-between mb-4">
+<!-- ─── PAGE TITLE ─────────────────────────────────────────── -->
+<div class="page-title">
     <div>
-        <h4 style="color:var(--cyan); margin-bottom:0">
-            <i class="bi bi-bar-chart-fill me-2"></i>Dashboard de Análisis
-        </h4>
-        <!-- ✅ TEXTO DESCRIPTIVO - AHORA EN BLANCO Y VISIBLE -->
-        <p class="text-white small mb-0" style="font-weight: 500; letter-spacing: 0.5px; margin-top: 0.5rem">
-            Visualización completa de datos por categoría, fuente y período
-        </p>
+        <h1 class="section-heading">Análisis <em style="color:var(--acid)">visual</em></h1>
+        <p class="section-sub">@Model.TotalItems.ToString("N0") registros · @Model.Categorias.Count categorías · @Model.Fuentes.Count fuentes</p>
     </div>
-    <div class="d-flex gap-2">
-        <a href="@Url.Action("DescargarEstadisticas", "Home")" class="btn btn-sm btn-outline-success">
-            <i class="bi bi-download"></i> Descargar Estadísticas
+    <div class="flex gap-2 items-center" style="flex-shrink:0">
+        <a href="/descargar-estadisticas" class="btn btn-ghost btn-sm">
+            <i class="bi bi-download" style="font-size:11px"></i>
+            Estadísticas CSV
         </a>
-        <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-table"></i> Ver Tabla
+        <a asp-action="Index" class="btn btn-outline-acid btn-sm">
+            <i class="bi bi-table" style="font-size:11px"></i>
+            Dataset
         </a>
     </div>
 </div>
 
-<!-- Tarjetas de resumen mejoradas -->
-<div class="row g-3 mb-4">
-    <div class="col-12 col-sm-6 col-lg-3">
-        <div class="stat-card stat-card-primary">
-            <div class="stat-icon">
-                <i class="bi bi-list-ul"></i>
+<!-- ─── STAT STRIP ─────────────────────────────────────────── -->
+<div class="stat-grid mb-6">
+    <div class="stat-cell">
+        <span class="stat-label">Total Registros</span>
+        <span class="stat-value stat-value-acid">@Model.TotalItems.ToString("N0")</span>
+        <span class="stat-detail">Datos acumulados</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-label">Categorías</span>
+        <span class="stat-value">@Model.Categorias.Count</span>
+        <span class="stat-detail">Grupos únicos</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-label">Fuentes</span>
+        <span class="stat-value">@Model.Fuentes.Count</span>
+        <span class="stat-detail">Orígenes de datos</span>
+    </div>
+    <div class="stat-cell">
+        <span class="stat-label">Períodos</span>
+        <span class="stat-value">@Model.Fechas.Count</span>
+        <span class="stat-detail">Línea temporal</span>
+    </div>
+</div>
+
+<!-- ─── CHARTS ROW 1 ──────────────────────────────────────── -->
+<div class="grid grid-2 mb-4" style="grid-template-columns:2fr 1fr">
+    <!-- Bar chart: categorías -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <span class="card-title-accent"></span>
+                Valor total por categoría
             </div>
-            <div class="stat-content">
-                <div class="stat-label">Total Registros</div>
-                <div class="stat-value">@Model.TotalItems.ToString("N0")</div>
-                <div class="stat-detail">Datos acumulados</div>
-            </div>
+            <span class="tag tag-dim" style="font-size:9px">@Model.Categorias.Count cats.</span>
+        </div>
+        <div class="chart-wrap" style="height:320px">
+            <canvas id="chartCat"></canvas>
+        </div>
+        <div class="card-footer">
+            <span class="text-mono text-faint" style="font-size:9px">Suma acumulada por grupo · top @Math.Min(Model.Categorias.Count,12)</span>
         </div>
     </div>
-    <div class="col-12 col-sm-6 col-lg-3">
-        <div class="stat-card stat-card-yellow">
-            <div class="stat-icon">
-                <i class="bi bi-folder-fill"></i>
-            </div>
-            <div class="stat-content">
-                <div class="stat-label">Categorías</div>
-                <div class="stat-value">@Model.Categorias.Count</div>
-                <div class="stat-detail">Grupos únicos</div>
+
+    <!-- Doughnut: fuentes -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <span class="card-title-accent" style="background:var(--copper)"></span>
+                Distribución por fuente
             </div>
         </div>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-3">
-        <div class="stat-card stat-card-green">
-            <div class="stat-icon">
-                <i class="bi bi-link-45deg"></i>
-            </div>
-            <div class="stat-content">
-                <div class="stat-label">Fuentes</div>
-                <div class="stat-value">@Model.Fuentes.Count</div>
-                <div class="stat-detail">Orígenes de datos</div>
-            </div>
+        <div class="chart-wrap" style="height:280px; display:flex; align-items:center; justify-content:center">
+            <canvas id="chartFuente"></canvas>
         </div>
-    </div>
-    <div class="col-12 col-sm-6 col-lg-3">
-        <div class="stat-card stat-card-danger">
-            <div class="stat-icon">
-                <i class="bi bi-calendar3"></i>
-            </div>
-            <div class="stat-content">
-                <div class="stat-label">Períodos</div>
-                <div class="stat-value">@Model.Fechas.Count</div>
-                <div class="stat-detail">Línea temporal</div>
-            </div>
+        <div class="card-footer">
+            <span class="text-mono text-faint" style="font-size:9px">% de registros por origen</span>
         </div>
     </div>
 </div>
 
-<!-- Gráficas principales -->
-<div class="row g-3">
-    <!-- Gráfica 1: Barras por categoría (GRANDE) -->
-    <div class="col-lg-8">
-        <div class="card h-100 shadow-sm">
-            <div class="card-header bg-gradient-cyan">
-                <i class="bi bi-bar-chart me-2"></i>
-                <strong>Valor Total por Categoría</strong>
-                <span class="badge bg-dark ms-2">@Model.Categorias.Count categorías</span>
+<!-- ─── LINE CHART ────────────────────────────────────────── -->
+@if (Model.Fechas.Any())
+{
+    <div class="card mb-4">
+        <div class="card-header">
+            <div class="card-title">
+                <span class="card-title-accent" style="background:var(--malachite)"></span>
+                Tendencia temporal
+                <span style="color:var(--chalk-faint); font-weight:300">— valor acumulado por período</span>
             </div>
-            <div class="card-body" style="position: relative; height: 400px;">
-                <canvas id="chartCat"></canvas>
-            </div>
-            <div class="card-footer text-muted small">
-                <i class="bi bi-info-circle"></i> Los valores se muestran en unidades totales acumuladas por categoría
-            </div>
+            <span class="tag tag-malachite" style="font-size:9px">@Model.Fechas.Count períodos</span>
+        </div>
+        <div class="chart-wrap" style="height:240px">
+            <canvas id="chartFecha"></canvas>
         </div>
     </div>
+}
 
-    <!-- Gráfica 2: Dona por fuente -->
-    <div class="col-lg-4">
-        <div class="card h-100 shadow-sm">
-            <div class="card-header bg-gradient-yellow">
-                <i class="bi bi-pie-chart me-2"></i>
-                <strong>Distribución por Fuente</strong>
-            </div>
-            <div class="card-body d-flex align-items-center justify-content-center" style="height: 400px;">
-                <canvas id="chartFuente"></canvas>
-            </div>
-            <div class="card-footer text-muted small">
-                <i class="bi bi-info-circle"></i> Porcentaje de registros por origen
-            </div>
+<!-- ─── STATS TABLE ───────────────────────────────────────── -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <span class="card-title-accent" style="background:var(--sapphire)"></span>
+            Resumen estadístico por categoría
         </div>
+        <a href="/descargar-estadisticas" class="btn btn-ghost btn-sm">
+            <i class="bi bi-download" style="font-size:10px"></i>
+            Descargar
+        </a>
     </div>
-
-    <!-- Gráfica 3: Línea por fecha (ANCHO COMPLETO) -->
-    @if (Model.Fechas.Any())
-    {
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-gradient-green">
-                    <i class="bi bi-graph-up me-2"></i>
-                    <strong>Tendencia Temporal</strong>
-                    <span class="badge bg-dark ms-2">@Model.Fechas.Count períodos</span>
-                </div>
-                <div class="card-body" style="position: relative; height: 300px;">
-                    <canvas id="chartFecha"></canvas>
-                </div>
-                <div class="card-footer text-muted small">
-                    <i class="bi bi-info-circle"></i> Valor acumulado por período (mes)
-                </div>
-            </div>
-        </div>
-    }
-</div>
-
-<!-- Tabla resumen de categorías -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header bg-dark border-top border-cyan">
-                <strong class="text-cyan">
-                    <i class="bi bi-table me-2"></i>Resumen por Categoría
-                </strong>
-                <a href="@Url.Action("DescargarEstadisticas", "Home")" class="btn btn-sm btn-outline-success float-end">
-                    <i class="bi bi-download"></i> Descargar
-                </a>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-sm table-dark table-hover mb-0">
-                    <thead>
-                        <tr style="border-top: 2px solid var(--cyan)">
-                            <th style="color: var(--cyan); font-weight: 700">Categoría</th>
-                            <th class="text-end" style="color: #ffc832">Cantidad</th>
-                            <th class="text-end" style="color: #00e080">Promedio</th>
-                            <th class="text-end" style="color: #ff5064">Máximo</th>
-                            <th class="text-end" style="color: #6496ff">Mínimo</th>
-                            <th class="text-end" style="color: var(--cyan); font-weight: 700">Total</th>
+    <div class="table-scroll" style="max-height:400px">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Categoría</th>
+                    <th style="text-align:right">Cantidad</th>
+                    <th style="text-align:right">Total</th>
+                    <th style="text-align:right">Barra relativa</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    double maxTotal = Model.Totales.Any() ? Model.Totales.Max() : 1;
+                    for (int i = 0; i < Model.Categorias.Count; i++)
+                    {
+                        string color = palette[i % palette.Length];
+                        double pct = maxTotal > 0 ? (Model.Totales[i] / maxTotal * 100) : 0;
+                        <tr>
+                            <td>
+                                <div class="flex gap-2 items-center">
+                                    <div class="src-dot" style="background:@color; border-radius:2px; width:8px; height:8px; flex-shrink:0"></div>
+                                    <span style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">@Model.Categorias[i]</span>
+                                </div>
+                            </td>
+                            <td class="num-cell">—</td>
+                            <td class="val-cell">@Model.Totales[i].ToString("N2")</td>
+                            <td style="min-width:120px; padding-right:16px">
+                                <div class="flex gap-2 items-center">
+                                    <div class="mini-bar-wrap" style="flex:1">
+                                        <div class="mini-bar" style="width:@pct.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)%; background:@color"></div>
+                                    </div>
+                                    <span class="text-mono text-faint" style="font-size:9px; min-width:32px; text-align:right">@pct.ToString("F0")%</span>
+                                </div>
+                            </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        @{
-                            int contador = 0;
-                            foreach (var cat in Model.Categorias.Take(10))
-                            {
-                                var idx = Model.Categorias.IndexOf(cat);
-                                <tr style="opacity: @(1 - contador * 0.05)">
-                                    <td style="color: @(palette[idx % palette.Length]); font-weight: 600">
-                                        <i class="bi bi-square-fill" style="font-size: 0.6rem; color: @(palette[idx % palette.Length])"></i>
-                                        @cat
-                                    </td>
-                                    <td class="text-end fw-bold">@Model.Totales[idx]</td>
-                                    <td class="text-end">@(Model.Totales[idx] > 0 ? (Model.Totales[idx] / contador).ToString("F2") : "0.00")</td>
-                                    <td class="text-end">@Model.Totales[idx]</td>
-                                    <td class="text-end">0.00</td>
-                                    <td class="text-end fw-bold" style="color: var(--cyan)">@Model.Totales[idx].ToString("N2")</td>
-                                </tr>
-                                contador++;
-                            }
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                    }
+                }
+            </tbody>
+        </table>
     </div>
 </div>
 
 @section Scripts {
 <script>
-const PALETTE = @Html.Raw(paletteJson);
-const dark = '#12121c', grid = '#2a2a3c', fg = '#e6e6f0';
+const PAL = @Html.Raw(paletteJson);
+const GRID = 'rgba(255,255,255,0.05)';
 
-Chart.defaults.color = fg;
-Chart.defaults.font.family = "'Segoe UI', sans-serif";
-Chart.defaults.plugins.legend.labels.padding = 15;
-
-const tooltipDark = {
-    backgroundColor: '#1c1c2a',
-    borderColor: '#3a3a58',
-    borderWidth: 2,
-    borderRadius: 6,
-    padding: 12,
-    titleColor: '#00c8dc',
-    titleFont: { weight: 'bold', size: 13 },
-    bodyColor: '#e6e6f0',
-    bodyFont: { size: 12 }
+const tip = {
+    backgroundColor: '#1a1a26',
+    borderColor: '#32324a',
+    borderWidth: 1,
+    borderRadius: 4,
+    padding: 10,
+    titleColor: '#d4ff00',
+    titleFont: { family: "'JetBrains Mono'", size: 10, weight: '500' },
+    bodyColor: '#e8e8f0',
+    bodyFont: { family: "'JetBrains Mono'", size: 10 }
 };
 
-// ── 1. Barras por categoría (GRANDE y mejorado) ──────────────────
-const ctxCat = document.getElementById('chartCat');
-const chartCat = new Chart(ctxCat, {
+const scaleX = {
+    grid: { color: GRID, drawBorder: false },
+    ticks: { font: { family: "'JetBrains Mono'", size: 9 }, color: '#9090a8', maxRotation: 45 }
+};
+
+const scaleY = {
+    grid: { color: GRID, drawBorder: false },
+    ticks: {
+        font: { family: "'JetBrains Mono'", size: 9 }, color: '#9090a8',
+        callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v
+    }
+};
+
+/* ── Bar: categorías ── */
+new Chart(document.getElementById('chartCat'), {
     type: 'bar',
     data: {
         labels: @Html.Raw(catJson),
         datasets: [{
-            label: 'Valor Total',
+            label: 'Valor total',
             data: @Html.Raw(totJson),
-            backgroundColor: PALETTE,
-            borderWidth: 2,
-            borderColor: PALETTE,
-            borderRadius: 8,
-            borderSkipped: false,
-            hoverBackgroundColor: PALETTE.map(c => c + 'dd')
+            backgroundColor: PAL.map(c => c + '26'),
+            borderColor: PAL,
+            borderWidth: 1,
+            borderRadius: 2,
         }]
     },
     options: {
-        indexAxis: 'x',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { 
-                display: true,
-                labels: { usePointStyle: true, padding: 20 }
-            },
-            tooltip: { 
-                ...tooltipDark,
-                callbacks: {
-                    label: ctx => {
-                        const val = ctx.parsed.y;
-                        let formatted;
-                        if (val >= 1e6) formatted = (val / 1e6).toFixed(1) + 'M';
-                        else if (val >= 1e3) formatted = (val / 1e3).toFixed(1) + 'K';
-                        else formatted = val.toFixed(2);
-                        return ` Valor: ${formatted}`;
-                    }
-                }
-            }
-        },
-        scales: {
-            x: { 
-                grid: { color: grid, display: false }, 
-                ticks: { maxRotation: 45, minRotation: 0 },
-                stacked: false
-            },
-            y: { 
-                grid: { color: grid, drawBorder: false },
-                ticks: { 
-                    callback: v => {
-                        if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-                        if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
-                        return v;
-                    }
-                },
-                stacked: false
-            }
-        }
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: tip },
+        scales: { x: scaleX, y: scaleY }
     }
 });
 
-// ── 2. Dona por fuente ───────────────────────────────────────
-const ctxFuente = document.getElementById('chartFuente');
-const chartFuente = new Chart(ctxFuente, {
+/* ── Doughnut: fuentes ── */
+new Chart(document.getElementById('chartFuente'), {
     type: 'doughnut',
     data: {
         labels: @Html.Raw(fuenteJson),
         datasets: [{
             data: @Html.Raw(conteoJson),
-            backgroundColor: PALETTE.slice(0, @Model.Fuentes.Count),
-            borderWidth: 3,
-            borderColor: dark,
-            hoverBorderColor: '#00c8dc'
+            backgroundColor: PAL.slice(0, @Model.Fuentes.Count).map(c => c + '33'),
+            borderColor: PAL.slice(0, @Model.Fuentes.Count),
+            borderWidth: 1,
+            hoverBorderWidth: 2,
         }]
     },
     options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '65%',
+        responsive: true, maintainAspectRatio: false, cutout: '68%',
         plugins: {
-            legend: { 
-                position: 'bottom', 
-                labels: { 
-                    boxWidth: 14,
-                    padding: 15,
-                    usePointStyle: true,
-                    pointStyle: 'circle'
-                } 
+            legend: {
+                position: 'bottom',
+                labels: {
+                    font: { family: "'JetBrains Mono'", size: 9 },
+                    color: '#9090a8', padding: 12, boxWidth: 10, usePointStyle: true
+                }
             },
             tooltip: {
-                ...tooltipDark,
+                ...tip,
                 callbacks: {
                     label: ctx => {
-                        const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                        const percent = ((ctx.parsed / total) * 100).toFixed(1);
-                        return ` ${ctx.label}: ${ctx.parsed} registros (${percent}%)`;
+                        const tot = ctx.dataset.data.reduce((a,b) => a+b, 0);
+                        const pct = ((ctx.parsed/tot)*100).toFixed(1);
+                        return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
                     }
                 }
             }
@@ -321,185 +258,29 @@ const chartFuente = new Chart(ctxFuente, {
 @if (Model.Fechas.Any())
 {
     <text>
-// ── 3. Línea temporal (mejorada) ─────────────────────────────
-const ctxFecha = document.getElementById('chartFecha');
-const chartFecha = new Chart(ctxFecha, {
+/* ── Line: temporal ── */
+new Chart(document.getElementById('chartFecha'), {
     type: 'line',
     data: {
         labels: @Html.Raw(fechasJson),
         datasets: [{
-            label: 'Valor Acumulado',
+            label: 'Valor acumulado',
             data: @Html.Raw(valFecJson),
-            borderColor: '#00e080',
-            backgroundColor: 'rgba(0,224,128,.15)',
-            fill: true,
-            tension: .5,
-            pointRadius: 5,
-            pointBackgroundColor: '#00e080',
-            pointBorderColor: '#fff',
-            pointBorderWidth: 2,
-            pointHoverRadius: 7,
-            pointHoverBackgroundColor: '#00e080'
+            borderColor: '#00d48a',
+            backgroundColor: 'rgba(0,212,138,0.08)',
+            fill: true, tension: 0.4,
+            pointRadius: 4, pointBackgroundColor: '#00d48a',
+            pointBorderColor: '#0a0a0f', pointBorderWidth: 2,
+            pointHoverRadius: 6
         }]
     },
     options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { 
-                display: true,
-                labels: { usePointStyle: true, padding: 20 }
-            },
-            tooltip: {
-                ...tooltipDark,
-                mode: 'index',
-                intersect: false,
-                callbacks: {
-                    label: ctx => {
-                        const val = ctx.parsed.y;
-                        let formatted;
-                        if (val >= 1e6) formatted = (val / 1e6).toFixed(2) + 'M';
-                        else if (val >= 1e3) formatted = (val / 1e3).toFixed(1) + 'K';
-                        else formatted = val.toFixed(2);
-                        return ` ${formatted}`;
-                    }
-                }
-            }
-        },
-        scales: {
-            x: { 
-                grid: { color: grid, display: false },
-                ticks: { maxRotation: 45 }
-            },
-            y: { 
-                grid: { color: grid, drawBorder: false },
-                ticks: {
-                    callback: v => {
-                        if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-                        if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
-                        return v;
-                    }
-                }
-            }
-        }
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: tip },
+        scales: { x: scaleX, y: scaleY }
     }
 });
     </text>
 }
 </script>
-
-<style>
-.bg-gradient-cyan {
-    background: linear-gradient(135deg, #006b8f 0%, #00c8dc 100%);
-    color: white;
-    border: none;
-}
-.bg-gradient-yellow {
-    background: linear-gradient(135deg, #b3860a 0%, #ffc832 100%);
-    color: white;
-    border: none;
-}
-.bg-gradient-green {
-    background: linear-gradient(135deg, #006b35 0%, #00e080 100%);
-    color: white;
-    border: none;
-}
-
-.stat-card {
-    background: var(--bg-card);
-    border: 2px solid var(--bg-light);
-    border-radius: 12px;
-    padding: 1.5rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    transition: all 0.3s ease;
-    cursor: pointer;
-}
-
-.stat-card:hover {
-    transform: translateY(-4px);
-    border-color: currentColor;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-}
-
-.stat-card-primary {
-    border-color: var(--cyan);
-}
-.stat-card-primary:hover {
-    color: var(--cyan);
-}
-
-.stat-card-yellow {
-    border-color: var(--yellow);
-}
-.stat-card-yellow:hover {
-    color: var(--yellow);
-}
-
-.stat-card-green {
-    border-color: var(--green);
-}
-.stat-card-green:hover {
-    color: var(--green);
-}
-
-.stat-card-danger {
-    border-color: #ff5064;
-}
-.stat-card-danger:hover {
-    color: #ff5064;
-}
-
-.stat-icon {
-    font-size: 2rem;
-    opacity: 0.8;
-    min-width: 50px;
-    text-align: center;
-}
-
-.stat-content {
-    flex: 1;
-}
-
-.stat-label {
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    opacity: 0.7;
-    margin-bottom: 0.3rem;
-}
-
-.stat-value {
-    font-size: 1.8rem;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-}
-
-.stat-detail {
-    font-size: 0.75rem;
-    opacity: 0.6;
-    margin-top: 0.2rem;
-}
-
-.card {
-    border: 1px solid var(--bg-light);
-    background: var(--bg-card);
-}
-
-.card-header {
-    border-bottom: 2px solid rgba(0, 200, 220, 0.3);
-    padding: 1rem 1.25rem;
-    font-size: 0.95rem;
-}
-
-.card-footer {
-    border-top: 1px solid var(--bg-light);
-    padding: 0.75rem 1.25rem;
-}
-
-.table-dark tbody tr:hover {
-    background-color: var(--bg-light) !important;
-}
-</style>
 }

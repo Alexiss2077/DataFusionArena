@@ -1,7 +1,7 @@
 @model ClimaViewModel
 @using System.Text.Json
 @{
-    ViewData["Title"] = "API Externa – Clima";
+    ViewData["Title"] = "API Clima";
     var fechasJson  = JsonSerializer.Serialize(Model.Fechas);
     var tmaxJson    = JsonSerializer.Serialize(Model.TempMax);
     var tminJson    = JsonSerializer.Serialize(Model.TempMin);
@@ -9,86 +9,175 @@
     var vientoJson  = JsonSerializer.Serialize(Model.Viento);
 }
 
-<div class="d-flex align-items-center justify-content-between mb-3">
+<!-- ─── PAGE TITLE ─────────────────────────────────────────── -->
+<div class="page-title">
     <div>
-        <h4 style="color:var(--cyan)">
-            <i class="bi bi-cloud-download-fill me-2"></i>API REST Externa – Clima
-        </h4>
-        <p class="text-white small mb-0">
-            Datos en tiempo real de <strong>Open-Meteo API</strong>
-            (<code>api.open-meteo.com</code>) · @Model.Ciudad · Pronóstico 14 días
+        <h1 class="section-heading">API <em style="color:var(--acid)">climática</em></h1>
+        <p class="section-sub">
+            Open-Meteo · <span style="color:var(--acid)">@Model.Ciudad</span> · Pronóstico 14 días · Sin API key
         </p>
     </div>
     <form asp-action="IntegrarDatos" method="post">
-        <button type="submit" class="btn btn-outline-cyan btn-sm">
-            <i class="bi bi-plus-circle"></i> Integrar al DataSet
+        <button type="submit" class="btn btn-acid btn-sm">
+            <i class="bi bi-plus-circle" style="font-size:11px"></i>
+            Integrar al Dataset
         </button>
     </form>
 </div>
 
-<!-- Info de la API -->
-<div class="card mb-3 p-3 small" style="border-color:#3a3a58">
-    <div class="d-flex align-items-start gap-3">
-        <i class="bi bi-info-circle-fill fs-5" style="color:var(--cyan)"></i>
-        <div>
-            <strong style="color:var(--cyan)">Bonus – Nube / API REST</strong><br/>
-            Esta sección consume la API gratuita de
-            <a href="https://open-meteo.com" target="_blank" style="color:var(--yellow)">Open-Meteo</a>
-            sin API key. Los datos obtenidos se transforman a <code>DataItem</code>
-            (el mismo modelo universal del proyecto) y se pueden integrar al DataSet
-            para analizarlos junto con los datos de archivos y bases de datos.
-            <br/>
-            <span style="color:#9999bb">
-                URL:
-                <code style="font-size:.8em">
-                https://api.open-meteo.com/v1/forecast?latitude=25.67&amp;longitude=-100.31
-                &amp;daily=temperature_2m_max,...&amp;forecast_days=14
-                </code>
-            </span>
+<!-- ─── INFO BAR ──────────────────────────────────────────── -->
+<div class="card mb-4" style="border-color:rgba(212,255,0,0.15)">
+    <div class="card-body" style="display:flex; gap:16px; align-items:flex-start; padding:14px 16px">
+        <div style="color:var(--acid); font-size:16px; flex-shrink:0; margin-top:2px">
+            <i class="bi bi-broadcast"></i>
+        </div>
+        <div style="flex:1">
+            <div style="font-family:var(--mono); font-size:11px; font-weight:500; color:var(--chalk); margin-bottom:4px">
+                Bonus — API REST Externa
+            </div>
+            <div style="font-family:var(--mono); font-size:10px; color:var(--chalk-faint); line-height:1.8">
+                Esta sección consume
+                <a href="https://open-meteo.com" target="_blank" style="color:var(--acid)">api.open-meteo.com</a>
+                en tiempo real. Los datos se transforman al modelo <code style="color:var(--sapphire)">DataItem</code>
+                y pueden integrarse al dataset para análisis conjunto con archivos y bases de datos.
+            </div>
+        </div>
+        <div style="flex-shrink:0; font-family:var(--mono); font-size:9px; color:var(--chalk-faint); text-align:right; line-height:2">
+            <div style="color:var(--chalk-dim); margin-bottom:2px">ENDPOINT</div>
+            <code style="font-size:9px; color:var(--sapphire)">api.open-meteo.com/v1/forecast</code>
         </div>
     </div>
 </div>
 
 @if (Model.ConError)
 {
-    <div class="alert alert-danger">
-        <i class="bi bi-exclamation-triangle me-2"></i>
-        Error al consumir la API: <strong>@Model.MensajeError</strong>
-        <br/><small>Verifica tu conexión a internet.</small>
+    <div class="card mb-4" style="border-color:rgba(255,61,107,0.3); background:rgba(255,61,107,0.04)">
+        <div class="card-body" style="display:flex; gap:12px; align-items:center; padding:14px 16px">
+            <i class="bi bi-exclamation-triangle" style="color:var(--rose); font-size:16px; flex-shrink:0"></i>
+            <div>
+                <div style="font-family:var(--mono); font-size:11px; font-weight:500; color:var(--rose)">Error de conexión</div>
+                <div style="font-family:var(--mono); font-size:10px; color:var(--chalk-faint); margin-top:2px">@Model.MensajeError</div>
+            </div>
+        </div>
     </div>
 }
 else
 {
-    <!-- Tabla pronóstico -->
+    <!-- ─── WEATHER CARDS ─────────────────────────────────────── -->
     <div class="card mb-4">
-        <div class="card-header fw-bold">
-            <i class="bi bi-thermometer-sun me-1" style="color:var(--yellow)"></i>
-            Pronóstico 14 Días – @Model.Ciudad
+        <div class="card-header">
+            <div class="card-title">
+                <span class="card-title-accent" style="background:var(--copper)"></span>
+                Pronóstico — @Model.Ciudad
+            </div>
+            <span class="tag tag-dim" style="font-size:9px">14 días</span>
         </div>
-        <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0 table-clima-sep">
+
+        <div style="overflow-x:auto; padding:16px">
+            <div style="display:flex; gap:8px; min-width:max-content">
+                @foreach (var dia in Model.Pronostico)
+                {
+                    bool rain = dia.Precipitacion > 5;
+                    bool hot  = dia.TempMax > 35;
+                    <div style="width:90px; background:var(--ink-3); border:1px solid var(--ink-5); border-radius:var(--r-lg); padding:12px 8px; text-align:center; flex-shrink:0; transition:border-color 0.15s"
+                         onmouseover="this.style.borderColor='var(--acid)'"
+                         onmouseout="this.style.borderColor='var(--ink-5)'">
+                        <div style="font-family:var(--mono); font-size:8px; color:var(--chalk-faint); margin-bottom:6px; letter-spacing:0.05em">
+                            @dia.Fecha.Substring(5)
+                        </div>
+                        <div style="font-size:20px; margin-bottom:8px; line-height:1">@dia.IconoClima</div>
+                        <div style="font-family:var(--mono); font-size:14px; font-weight:600; color:@(hot ? "var(--copper)" : "var(--chalk)"); margin-bottom:2px">
+                            @dia.TempMax.ToString("F0")°
+                        </div>
+                        <div style="font-family:var(--mono); font-size:11px; color:var(--sapphire)">
+                            @dia.TempMin.ToString("F0")°
+                        </div>
+                        @if (dia.Precipitacion > 0)
+                        {
+                            <div style="font-family:var(--mono); font-size:9px; color:@(rain ? "var(--sapphire)" : "var(--chalk-faint)"); margin-top:6px">
+                                @dia.Precipitacion.ToString("F1")mm
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── CHARTS ────────────────────────────────────────────── -->
+    <div class="grid grid-2 mb-4" style="grid-template-columns:2fr 1fr">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <span class="card-title-accent" style="background:var(--copper)"></span>
+                    Temperatura Máx / Mín (°C)
+                </div>
+            </div>
+            <div class="chart-wrap" style="height:260px">
+                <canvas id="chartTemp"></canvas>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <span class="card-title-accent" style="background:var(--sapphire)"></span>
+                    Precipitación (mm)
+                </div>
+            </div>
+            <div class="chart-wrap" style="height:260px">
+                <canvas id="chartPrecip"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <div class="card-title">
+                <span class="card-title-accent" style="background:var(--malachite)"></span>
+                Velocidad del Viento (km/h)
+            </div>
+        </div>
+        <div class="chart-wrap" style="height:180px">
+            <canvas id="chartViento"></canvas>
+        </div>
+    </div>
+
+    <!-- ─── DATA TABLE ────────────────────────────────────────── -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <span class="card-title-accent" style="background:var(--chalk-faint)"></span>
+                Datos detallados
+            </div>
+        </div>
+        <div class="table-scroll" style="max-height:360px">
+            <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Clima</th>
+                        <th></th>
                         <th>Fecha</th>
-                        <th class="text-end">T. Máx (°C)</th>
-                        <th class="text-end">T. Mín (°C)</th>
-                        <th class="text-end">Precipitación (mm)</th>
-                        <th class="text-end">Viento (km/h)</th>
+                        <th style="text-align:right">T. Máx (°C)</th>
+                        <th style="text-align:right">T. Mín (°C)</th>
+                        <th style="text-align:right">Precipit. (mm)</th>
+                        <th style="text-align:right">Viento (km/h)</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var dia in Model.Pronostico)
                     {
                         <tr>
-                            <td style="font-size:1.3em">@dia.IconoClima</td>
-                            <td class="fw-bold">@dia.Fecha</td>
-                            <td class="text-end temp-max">@dia.TempMax.ToString("F1")°</td>
-                            <td class="text-end temp-min">@dia.TempMin.ToString("F1")°</td>
-                            <td class="text-end @(dia.Precipitacion > 3 ? "precip-alta" : "precip-baja")">
-                                @dia.Precipitacion.ToString("F1") mm
+                            <td style="font-size:16px; line-height:1; padding:8px 12px">@dia.IconoClima</td>
+                            <td style="font-weight:500">@dia.Fecha</td>
+                            <td style="text-align:right; color:@(dia.TempMax > 35 ? "var(--copper)" : "var(--chalk)")">
+                                @dia.TempMax.ToString("F1")°
                             </td>
-                            <td class="text-end viento">@dia.Viento.ToString("F0")</td>
+                            <td style="text-align:right; color:var(--sapphire)">
+                                @dia.TempMin.ToString("F1")°
+                            </td>
+                            <td style="text-align:right; color:@(dia.Precipitacion > 5 ? "var(--sapphire)" : "var(--chalk-faint)")">
+                                @dia.Precipitacion.ToString("F1")
+                            </td>
+                            <td class="num-cell">@dia.Viento.ToString("F0")</td>
                         </tr>
                     }
                 </tbody>
@@ -96,189 +185,105 @@ else
         </div>
     </div>
 
-    <!-- Gráficas -->
-    <div class="row g-3">
-        <!-- Temperatura -->
-        <div class="col-lg-8">
-            <div class="card">
-                <div class="card-header fw-bold">
-                    <i class="bi bi-thermometer-half me-1" style="color:#ff9632"></i>
-                    Temperatura Máx / Mín (°C)
-                </div>
-                <div class="card-body">
-                    <canvas id="chartTemp" style="max-height:280px"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Precipitación -->
-        <div class="col-lg-4">
-            <div class="card">
-                <div class="card-header fw-bold">
-                    <i class="bi bi-cloud-rain me-1" style="color:#00c8dc"></i>
-                    Precipitación (mm)
-                </div>
-                <div class="card-body">
-                    <canvas id="chartPrecip" style="max-height:280px"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Viento -->
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header fw-bold">
-                    <i class="bi bi-wind me-1" style="color:var(--green)"></i>
-                    Velocidad Máxima del Viento (km/h)
-                </div>
-                <div class="card-body">
-                    <canvas id="chartViento" style="max-height:180px"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Código JSON de la respuesta (educativo) -->
+    <!-- ─── ENDPOINT CODE ────────────────────────────────────── -->
     <div class="card mt-4">
-        <div class="card-header fw-bold small">
-            <i class="bi bi-code-slash me-1" style="color:var(--green)"></i>
-            Estructura JSON que devuelve la API (Open-Meteo)
+        <div class="card-header">
+            <div class="card-title">
+                <span class="card-title-accent" style="background:var(--malachite)"></span>
+                Respuesta JSON — Open-Meteo
+            </div>
+            <span class="tag tag-malachite" style="font-size:9px">live</span>
         </div>
-        <div class="card-body p-3">
-            <pre class="small mb-0" style="max-height:200px;overflow-y:auto">{
+        <div class="card-body" style="padding:0">
+            <pre style="border:none; border-radius:0; margin:0; max-height:200px; overflow-y:auto; font-size:10px">{
   "daily": {
-    "time":                ["@(Model.Fechas.FirstOrDefault())", "@(Model.Fechas.Skip(1).FirstOrDefault())", "..."],
-    "temperature_2m_max":  [@(Model.TempMax.FirstOrDefault().ToString("F1")), @(Model.TempMax.Skip(1).FirstOrDefault().ToString("F1")), ...],
-    "temperature_2m_min":  [@(Model.TempMin.FirstOrDefault().ToString("F1")), @(Model.TempMin.Skip(1).FirstOrDefault().ToString("F1")), ...],
-    "precipitation_sum":   [@(Model.Precipitacion.FirstOrDefault().ToString("F1")), ...],
-    "windspeed_10m_max":   [@(Model.Viento.FirstOrDefault().ToString("F0")), ...]
+    "time":               ["@(Model.Fechas.FirstOrDefault())", "@(Model.Fechas.Skip(1).FirstOrDefault())", "..."],
+    "temperature_2m_max": [@(Model.TempMax.FirstOrDefault().ToString("F1")), @(Model.TempMax.Skip(1).FirstOrDefault().ToString("F1")), ...],
+    "temperature_2m_min": [@(Model.TempMin.FirstOrDefault().ToString("F1")), @(Model.TempMin.Skip(1).FirstOrDefault().ToString("F1")), ...],
+    "precipitation_sum":  [@(Model.Precipitacion.FirstOrDefault().ToString("F1")), ...],
+    "windspeed_10m_max":  [@(Model.Viento.FirstOrDefault().ToString("F0")), ...]
   }
 }</pre>
         </div>
     </div>
 }
 
-<style>
-/* ── Separadores de columnas ── */
-.table-clima-sep {
-    background-color: var(--bg-card) !important;
-}
-.table-clima-sep thead th {
-    border-right: 1px solid #3a3a58;
-    border-bottom: 2px solid var(--cyan) !important;
-    color: var(--cyan) !important;
-    background-color: var(--bg-light) !important;
-}
-.table-clima-sep thead th:last-child { border-right: none; }
-.table-clima-sep tbody tr {
-    background-color: var(--bg-card) !important;
-}
-.table-clima-sep tbody td {
-    border-right: 1px solid #2a2a3c;
-    color: var(--fg) !important;
-    background-color: var(--bg-card) !important;
-}
-.table-clima-sep tbody td:last-child { border-right: none; }
-.table-clima-sep tbody tr:hover td {
-    border-right-color: #3a3a58;
-    background-color: var(--bg-light) !important;
-}
-/* Colores específicos por columna */
-.table-clima-sep tbody tr td.temp-max   { color: #ff9632 !important; }
-.table-clima-sep tbody tr td.temp-min   { color: #6496ff !important; }
-.table-clima-sep tbody tr td.precip-alta{ color: #00c8dc !important; }
-.table-clima-sep tbody tr td.precip-baja{ color: #8888aa !important; }
-.table-clima-sep tbody tr td.viento     { color: #8888aa !important; }
-</style>
-
 @section Scripts {
 <script>
-const dark = '#12121c', grid = '#2a2a3c', fg = '#e6e6f0';
-Chart.defaults.color = fg;
-Chart.defaults.font.family = "'Segoe UI', sans-serif";
-const tip = { backgroundColor:'#1c1c2a', borderColor:'#3a3a58', borderWidth:1,
-              titleColor:'#00c8dc', bodyColor:'#e6e6f0' };
+const GRID = 'rgba(255,255,255,0.05)';
+const tip = {
+    backgroundColor: '#1a1a26', borderColor: '#32324a', borderWidth: 1,
+    borderRadius: 4, padding: 10,
+    titleColor: '#d4ff00',
+    titleFont: { family: "'JetBrains Mono'", size: 10, weight: '500' },
+    bodyColor: '#e8e8f0',
+    bodyFont: { family: "'JetBrains Mono'", size: 10 }
+};
+const scaleX = {
+    grid: { color: GRID }, ticks: { font: { family:"'JetBrains Mono'", size:9 }, color:'#9090a8', maxRotation:45 }
+};
+const scaleY = (cb) => ({
+    grid: { color: GRID }, ticks: { font: { family:"'JetBrains Mono'", size:9 }, color:'#9090a8', callback: cb || (v => v) }
+});
 
-// ── Temperatura ──────────────────────────────────────────────
 new Chart(document.getElementById('chartTemp'), {
     type: 'line',
     data: {
         labels: @Html.Raw(fechasJson),
         datasets: [
             {
-                label: 'T. Máx',
-                data: @Html.Raw(tmaxJson),
-                borderColor: '#ff9632',
-                backgroundColor: 'rgba(255,150,50,.12)',
-                fill: false, tension: .4, pointRadius: 4,
-                pointBackgroundColor: '#ff9632'
+                label: 'T. Máx', data: @Html.Raw(tmaxJson),
+                borderColor:'#ff6b35', backgroundColor:'rgba(255,107,53,0.08)',
+                fill:false, tension:0.4, pointRadius:4,
+                pointBackgroundColor:'#ff6b35', pointBorderColor:'#0a0a0f', pointBorderWidth:2
             },
             {
-                label: 'T. Mín',
-                data: @Html.Raw(tminJson),
-                borderColor: '#6496ff',
-                backgroundColor: 'rgba(100,150,255,.12)',
-                fill: false, tension: .4, pointRadius: 4,
-                pointBackgroundColor: '#6496ff'
+                label: 'T. Mín', data: @Html.Raw(tminJson),
+                borderColor:'#3d8bff', backgroundColor:'rgba(61,139,255,0.08)',
+                fill:false, tension:0.4, pointRadius:4,
+                pointBackgroundColor:'#3d8bff', pointBorderColor:'#0a0a0f', pointBorderWidth:2
             }
         ]
     },
     options: {
-        responsive: true,
-        plugins: { tooltip: tip, legend: { labels: { boxWidth:12 } } },
-        scales: {
-            x: { grid: { color: grid } },
-            y: { grid: { color: grid },
-                 ticks: { callback: v => v + '°C' } }
-        }
+        responsive:true, maintainAspectRatio:false,
+        plugins: { tooltip:tip, legend:{ labels:{ font:{family:"'JetBrains Mono'",size:9}, color:'#9090a8', boxWidth:10, usePointStyle:true } } },
+        scales: { x:scaleX, y:scaleY(v => v+'°C') }
     }
 });
 
-// ── Precipitación ────────────────────────────────────────────
 new Chart(document.getElementById('chartPrecip'), {
     type: 'bar',
     data: {
         labels: @Html.Raw(fechasJson),
         datasets: [{
-            label: 'mm',
-            data: @Html.Raw(precipJson),
-            backgroundColor: 'rgba(0,200,220,.7)',
-            borderColor: '#00c8dc',
-            borderWidth: 1,
-            borderRadius: 4
+            label: 'mm', data: @Html.Raw(precipJson),
+            backgroundColor: 'rgba(61,139,255,0.25)', borderColor:'#3d8bff',
+            borderWidth:1, borderRadius:2
         }]
     },
     options: {
-        responsive: true,
-        plugins: { tooltip: tip, legend: { display: false } },
-        scales: {
-            x: { grid: { color: grid }, ticks: { maxRotation: 60 } },
-            y: { grid: { color: grid }, ticks: { callback: v => v + ' mm' } }
-        }
+        responsive:true, maintainAspectRatio:false,
+        plugins: { legend:{ display:false }, tooltip:tip },
+        scales: { x:scaleX, y:scaleY(v => v+' mm') }
     }
 });
 
-// ── Viento ───────────────────────────────────────────────────
 new Chart(document.getElementById('chartViento'), {
     type: 'line',
     data: {
         labels: @Html.Raw(fechasJson),
         datasets: [{
-            label: 'km/h',
-            data: @Html.Raw(vientoJson),
-            borderColor: '#00e080',
-            backgroundColor: 'rgba(0,224,128,.1)',
-            fill: true, tension: .4, pointRadius: 3,
-            pointBackgroundColor: '#00e080'
+            label: 'km/h', data: @Html.Raw(vientoJson),
+            borderColor:'#00d48a', backgroundColor:'rgba(0,212,138,0.08)',
+            fill:true, tension:0.4, pointRadius:3,
+            pointBackgroundColor:'#00d48a', pointBorderColor:'#0a0a0f', pointBorderWidth:2
         }]
     },
     options: {
-        responsive: true,
-        plugins: { tooltip: tip, legend: { display: false } },
-        scales: {
-            x: { grid: { color: grid } },
-            y: { grid: { color: grid }, ticks: { callback: v => v + ' km/h' } }
-        }
+        responsive:true, maintainAspectRatio:false,
+        plugins: { legend:{ display:false }, tooltip:tip },
+        scales: { x:scaleX, y:scaleY(v => v+' km/h') }
     }
 });
 </script>

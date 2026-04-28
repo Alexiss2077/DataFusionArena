@@ -70,7 +70,7 @@ public static class DatabaseWriter
             result.Insertados = insertados;
             result.Errores = errores;
             result.Exito = true;
-            result.Mensaje = $"✅ {insertados} registros insertados en '{tabla}'. Errores: {errores}.";
+            result.Mensaje = $" {insertados} registros insertados en '{tabla}'. Errores: {errores}.";
         }
         catch (Exception ex)
         {

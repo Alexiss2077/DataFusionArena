@@ -1,6 +1,6 @@
 @model HomeViewModel
 @using DataFusionArena.Web.Helpers
-@{ ViewData["Title"] = "Datos"; }
+@{ ViewData["Title"] = "Dataset"; }
 
 @{
     bool hayDatos = Model.TotalRegistros > 0;
@@ -15,130 +15,135 @@
                 columnasNumericas.Add(col);
         }
     }
+
+    string SrcClass(string fuente) => fuente switch {
+        "json"           => "src-json",
+        "csv"            => "src-csv",
+        "xml"            => "src-xml",
+        "txt"            => "src-txt",
+        "postgresql"     => "src-postgresql",
+        "mariadb"        => "src-mariadb",
+        "api-open-meteo" => "src-api",
+        _ => ""
+    };
+
+    string SrcTagClass(string fuente) => fuente switch {
+        "json"           => "tag tag-malachite",
+        "csv"            => "tag tag-copper",
+        "xml"            => "tag tag-sapphire",
+        "txt"            => "tag tag-dim",
+        "postgresql"     => "tag tag-acid",
+        "mariadb"        => "tag tag-rose",
+        "api-open-meteo" => "tag tag-dim",
+        _ => "tag tag-dim"
+    };
 }
 
-<div class="d-flex align-items-center justify-content-between mb-3">
+<!-- ─── PAGE TITLE ─────────────────────────────────────────── -->
+<div class="page-title">
     <div>
-        <h4 class="mb-0" style="color:var(--cyan)">
-            <i class="bi bi-table me-2"></i>Todos los Datos
+        <h1 class="section-heading">Data Fusion <em style="color:var(--acid)">Arena</em></h1>
+        <p class="section-sub">
             @if (hayDatos)
             {
-                <span class="badge bg-secondary ms-2" style="font-size:.7em">@Model.TotalRegistros registros</span>
+                <span class="text-mono" style="color:var(--acid)">@Model.TotalRegistros.ToString("N0")</span>
+                <span> registros · @Model.Columnas.Count columnas · @Model.Fuentes.Count fuentes</span>
             }
-        </h4>
+            else
+            {
+                <span>Sin datos — carga un archivo para comenzar</span>
+            }
+        </p>
     </div>
-    <div class="d-flex gap-2">
+
+    <div class="flex gap-2 items-center" style="flex-shrink:0">
         @if (hayDatos)
         {
-            <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalDescargar">
-                <i class="bi bi-cloud-download"></i>
-                <strong>📦 Dataset Completo</strong>
+            <button onclick="openModal('modal-dl')" class="btn btn-acid btn-sm">
+                <i class="bi bi-cloud-arrow-down" style="font-size:13px"></i>
+                Exportar
             </button>
         }
 
-        <form asp-action="CargarArchivo" method="post" enctype="multipart/form-data" class="d-flex gap-2">
+        <form asp-action="CargarArchivo" method="post" enctype="multipart/form-data"
+              class="flex gap-2 items-center">
             <input type="file" name="archivo" accept=".json,.csv,.xml,.txt"
-                   class="form-control form-control-sm" style="max-width:220px" required />
-            <button type="submit" class="btn btn-sm btn-outline-cyan">
-                <i class="bi bi-upload"></i> Cargar
+                   style="max-width:200px; font-size:11px" required />
+            <button type="submit" class="btn btn-ghost btn-sm">
+                <i class="bi bi-upload" style="font-size:11px"></i>
+                Cargar
             </button>
         </form>
 
         @if (hayDatos)
         {
-            <a asp-action="Graficas" class="btn btn-sm btn-outline-warning">
-                <i class="bi bi-bar-chart"></i> Gráficas
+            <a asp-action="Graficas" class="btn btn-outline-acid btn-sm">
+                <i class="bi bi-activity" style="font-size:11px"></i>
+                Análisis
             </a>
         }
     </div>
 </div>
 
-@if (hayDatos)
+<!-- ─── SOURCE LEGEND ─────────────────────────────────────── -->
+@if (hayDatos && Model.Fuentes.Any())
 {
-    <!-- MODAL DESCARGA -->
-    <div class="modal fade" id="modalDescargar" tabindex="-1" aria-labelledby="modalDescargaLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content" style="background: var(--bg-card); border: 2px solid var(--bg-light)">
-                <div class="modal-header" style="border-bottom: 2px solid var(--cyan)">
-                    <h5 class="modal-title" id="modalDescargaLabel" style="color: var(--cyan); font-weight: 700">
-                        <i class="bi bi-cloud-download"></i> Descargar Dataset Completo
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" style="padding: 2rem">
-                    <div class="alert alert-success" style="background: rgba(0,224,128,.15); border-color: #00e080; color: var(--fg); margin-bottom: 1.5rem">
-                        <i class="bi bi-info-circle-fill me-2"></i>
-                        <strong>Información del Dataset:</strong>
-                        <ul class="mb-0 mt-2 ps-4">
-                            <li>⦿ <strong>@Model.TotalRegistros registros</strong> totales</li>
-                            <li>⦿ @Model.Columnas.Count columnas</li>
-                            <li>⦿ Fuentes: @string.Join(", ", Model.Fuentes)</li>
-                        </ul>
-                    </div>
-                    <p style="margin-bottom: 1.5rem; font-size: 0.95rem"><strong>📥 Selecciona el formato:</strong></p>
-                    <div class="d-grid gap-2">
-                        <a href="/descargar-datos?formato=csv" class="btn btn-outline-success btn-lg d-flex align-items-center justify-content-between p-3" onclick="descargarArchivo(event)">
-                            <div class="text-start"><div class="fw-bold">📄 CSV (Recomendado)</div><small class="text-muted">Compatible con Excel, Sheets, Python, R</small></div>
-                            <i class="bi bi-download" style="font-size: 1.5rem; opacity: 0.5"></i>
-                        </a>
-                        <a href="/descargar-datos?formato=excel" class="btn btn-outline-warning btn-lg d-flex align-items-center justify-content-between p-3" onclick="descargarArchivo(event)">
-                            <div class="text-start"><div class="fw-bold">📊 Excel (.xlsx)</div><small class="text-muted">Formato Microsoft Office</small></div>
-                            <i class="bi bi-download" style="font-size: 1.5rem; opacity: 0.5"></i>
-                        </a>
-                        <a href="/descargar-estadisticas" class="btn btn-outline-info btn-lg d-flex align-items-center justify-content-between p-3" onclick="descargarArchivo(event)">
-                            <div class="text-start"><div class="fw-bold">📈 Estadísticas</div><small class="text-muted">Resumen por categoría (CSV)</small></div>
-                            <i class="bi bi-download" style="font-size: 1.5rem; opacity: 0.5"></i>
-                        </a>
-                    </div>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--bg-light); padding: 1rem">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                    <small class="text-muted ms-auto">💡 Usa los botones de arriba para descargar</small>
-                </div>
-            </div>
-        </div>
+    <div class="flex gap-3 items-center mb-4 flex-wrap"
+         style="padding: 10px 14px; background:var(--ink-2); border:1px solid var(--ink-4); border-radius:var(--r-lg)">
+        <span class="text-mono text-faint" style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em">Fuentes:</span>
+        @foreach (var f in Model.Fuentes)
+        {
+            <span class="@SrcTagClass(f)">@f</span>
+        }
     </div>
 }
 
 @if (!hayDatos)
 {
-    <!-- Estado vacío -->
-    <div class="card" style="border: 2px dashed var(--bg-light);">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-inbox" style="font-size: 4rem; color: var(--bg-light);"></i>
-            <h5 class="mt-3" style="color: var(--fg); opacity: 0.6;">Sin datos cargados</h5>
-            <p class="text-muted mb-4">Carga un archivo para comenzar a explorar tu dataset.</p>
-            <div class="d-flex justify-content-center gap-2 flex-wrap">
-                <span class="badge" style="background:var(--bg-light);color:var(--fg);font-size:.85em;padding:.5rem .8rem;">JSON</span>
-                <span class="badge" style="background:var(--bg-light);color:var(--fg);font-size:.85em;padding:.5rem .8rem;">CSV</span>
-                <span class="badge" style="background:var(--bg-light);color:var(--fg);font-size:.85em;padding:.5rem .8rem;">XML</span>
-                <span class="badge" style="background:var(--bg-light);color:var(--fg);font-size:.85em;padding:.5rem .8rem;">TXT</span>
+    <!-- ─── EMPTY STATE ─────────────────────────────────────────── -->
+    <div class="card" style="border-style:dashed">
+        <div class="empty-state">
+            <div class="empty-icon"><i class="bi bi-database-slash"></i></div>
+            <div class="empty-title">Sin datos cargados</div>
+            <div class="empty-body">
+                Carga un archivo JSON, CSV, XML o TXT para comenzar a explorar y fusionar tus datasets.
+            </div>
+            <div class="flex gap-2 mt-4">
+                <span class="tag tag-malachite">JSON</span>
+                <span class="tag tag-copper">CSV</span>
+                <span class="tag tag-sapphire">XML</span>
+                <span class="tag tag-dim" style="color:#a855f7; border-color:rgba(168,85,247,0.3); background:rgba(168,85,247,0.08)">TXT</span>
             </div>
         </div>
     </div>
 }
 else
 {
-    <!-- Filtros -->
-    <form method="get" class="card mb-3 p-3">
-        <div class="row g-2 align-items-end">
-            <div class="col-md-3">
-                <label class="form-label small" style="color:var(--cyan)">Buscar en</label>
-                <select name="campo" class="form-select form-select-sm">
+    <!-- ─── FILTER BAR ──────────────────────────────────────────── -->
+    <form method="get">
+        <div class="filter-bar">
+            <div class="filter-group">
+                <span class="filter-label">Buscar en</span>
+                <select name="campo" class="form-select" style="width:160px">
                     @foreach (var col in Model.Columnas)
                     {
                         <option value="@col" selected="@(Model.Campo == col)">@col</option>
                     }
                 </select>
             </div>
-            <div class="col-md-4">
-                <label class="form-label small" style="color:var(--cyan)">Valor</label>
-                <input name="busqueda" value="@Model.Busqueda"
-                       class="form-control form-control-sm" placeholder="Escribe para filtrar..." />
+
+            <div class="filter-group" style="flex:1; min-width:180px">
+                <span class="filter-label">Valor</span>
+                <div class="flex gap-2">
+                    <input name="busqueda" value="@Model.Busqueda"
+                           class="form-control" placeholder="Filtrar registros..."
+                           style="flex:1" />
+                </div>
             </div>
-            <div class="col-md-3">
-                <label class="form-label small" style="color:var(--cyan)">Fuente</label>
-                <select name="fuente" class="form-select form-select-sm">
+
+            <div class="filter-group">
+                <span class="filter-label">Fuente</span>
+                <select name="fuente" class="form-select" style="width:140px">
                     <option value="">— Todas —</option>
                     @foreach (var f in Model.Fuentes)
                     {
@@ -146,58 +151,73 @@ else
                     }
                 </select>
             </div>
-            <div class="col-md-2 d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm flex-fill">
-                    <i class="bi bi-search"></i> Filtrar
-                </button>
-                <a asp-action="Index" class="btn btn-outline-secondary btn-sm">✖</a>
+
+            <div class="filter-group">
+                <span class="filter-label">&nbsp;</span>
+                <div class="flex gap-2">
+                    <button type="submit" class="btn btn-acid btn-sm">
+                        <i class="bi bi-search" style="font-size:11px"></i>
+                        Filtrar
+                    </button>
+                    <a asp-action="Index" class="btn btn-ghost btn-sm">
+                        <i class="bi bi-x" style="font-size:13px"></i>
+                    </a>
+                </div>
+            </div>
+
+            <div class="ml-auto flex gap-2 items-center" style="align-self:flex-end">
+                <span class="text-mono text-faint" style="font-size:9px">
+                    pág. @Model.Pagina / @Model.TotalPaginas
+                </span>
             </div>
         </div>
     </form>
 
-    <!-- Tabla dinámica -->
+    <!-- ─── TABLE ────────────────────────────────────────────────── -->
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center py-2">
-            <span class="small fw-bold">
-                Página @Model.Pagina de @Model.TotalPaginas
-                &nbsp;·&nbsp; Mostrando @Model.Datos.Count de @Model.TotalRegistros
-                <span class="text-muted ms-2">· @Model.Columnas.Count columnas</span>
-            </span>
-            <a asp-action="Graficas" class="btn btn-sm btn-outline-cyan">
-                <i class="bi bi-bar-chart"></i> Ver Gráficas
-            </a>
+        <div class="card-header">
+            <div class="card-title">
+                <span class="card-title-accent"></span>
+                Registros
+                <span style="color:var(--chalk-faint); font-weight:300">
+                    — mostrando @Model.Datos.Count de @Model.TotalRegistros
+                </span>
+            </div>
+            <div class="flex gap-2 items-center">
+                <span class="text-mono text-faint" style="font-size:9px">@Model.Columnas.Count cols</span>
+                <a asp-action="Graficas" class="btn btn-ghost btn-sm">
+                    <i class="bi bi-bar-chart-line" style="font-size:11px"></i>
+                    Gráficas
+                </a>
+            </div>
         </div>
-        <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0 table-col-sep">
+
+        <div class="table-scroll">
+            <table class="data-table">
                 <thead>
                     <tr>
                         @foreach (var col in Model.Columnas)
                         {
                             bool esNum = columnasNumericas.Contains(col);
-                            <th class="@(esNum ? "text-end" : "")">@col</th>
+                            <th style="@(esNum ? "text-align:right" : "")">@col</th>
                         }
                     </tr>
                 </thead>
                 <tbody>
                     @if (!Model.Datos.Any())
                     {
-                        <tr><td colspan="@Model.Columnas.Count" class="text-center text-muted py-4">Sin resultados</td></tr>
+                        <tr>
+                            <td colspan="@Model.Columnas.Count" class="text-center"
+                                style="padding: 40px; color: var(--chalk-faint); font-family:var(--mono); font-size:11px">
+                                Sin resultados para la búsqueda
+                            </td>
+                        </tr>
                     }
+
                     @foreach (var item in Model.Datos)
                     {
                         string fuente = item.Fuente ?? "";
-                        string rowStyle = fuente switch
-                        {
-                            "json"           => "border-left: 3px solid #00e080;",
-                            "csv"            => "border-left: 3px solid #ffc832;",
-                            "xml"            => "border-left: 3px solid #00c8dc;",
-                            "txt"            => "border-left: 3px solid #b464ff;",
-                            "postgresql"     => "border-left: 3px solid #6496ff;",
-                            "mariadb"        => "border-left: 3px solid #ff9632;",
-                            "api-open-meteo" => "border-left: 3px solid #e0e0e0;",
-                            _                => ""
-                        };
-                        <tr style="@rowStyle">
+                        <tr class="@SrcClass(fuente)">
                             @foreach (var col in Model.Columnas)
                             {
                                 string val = DataItemHelper.ObtenerValor(item, col, Model.Mapeo);
@@ -207,26 +227,15 @@ else
                                 if (string.Equals(clave, "fuente", StringComparison.OrdinalIgnoreCase)
                                     || string.Equals(col, "fuente", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    var badgeColor = val switch
-                                    {
-                                        "json"           => "success",
-                                        "csv"            => "warning",
-                                        "xml"            => "info",
-                                        "txt"            => "secondary",
-                                        "postgresql"     => "primary",
-                                        "mariadb"        => "danger",
-                                        "api-open-meteo" => "light",
-                                        _                => "dark"
-                                    };
-                                    <td><span class="badge bg-@badgeColor badge-fuente">@val</span></td>
+                                    <td><span class="@SrcTagClass(val)">@val</span></td>
                                 }
                                 else if (string.Equals(clave, "categoria", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    <td><span class="badge" style="background:var(--bg-light);color:var(--fg)">@val</span></td>
+                                    <td><span class="tag tag-dim" style="font-size:9px">@val</span></td>
                                 }
                                 else if (string.Equals(clave, "valor", StringComparison.OrdinalIgnoreCase))
                                 {
-                                    <td class="text-end fw-bold" style="color:var(--yellow)">
+                                    <td class="val-cell">
                                         @if (double.TryParse(val, System.Globalization.NumberStyles.Any,
                                             System.Globalization.CultureInfo.InvariantCulture, out double dv))
                                         { @dv.ToString("N2") }
@@ -235,11 +244,11 @@ else
                                 }
                                 else if (esNum)
                                 {
-                                    <td class="text-end text-muted small">@val</td>
+                                    <td class="num-cell">@val</td>
                                 }
                                 else
                                 {
-                                    <td>@val</td>
+                                    <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">@val</td>
                                 }
                             }
                         </tr>
@@ -250,9 +259,9 @@ else
 
         @if (Model.TotalPaginas > 1)
         {
-            <div class="card-footer d-flex justify-content-center">
+            <div class="card-footer" style="display:flex; align-items:center; justify-content:center; gap:16px">
                 <nav>
-                    <ul class="pagination pagination-sm mb-0">
+                    <ul class="pagination">
                         <li class="page-item @(Model.Pagina == 1 ? "disabled" : "")">
                             <a class="page-link" asp-action="Index"
                                asp-route-pagina="@(Model.Pagina - 1)"
@@ -285,72 +294,90 @@ else
     </div>
 }
 
-<style>
-.badge-fuente { font-size: .75em; font-weight: 600; padding: 0.4rem 0.6rem; }
+<!-- ─── EXPORT MODAL ─────────────────────────────────────────── -->
+<div class="modal-backdrop" id="modal-dl" onclick="if(event.target===this)closeModal('modal-dl')">
+    <div class="modal-box">
+        <div class="modal-header">
+            <span class="modal-title">
+                <i class="bi bi-cloud-arrow-down" style="color:var(--acid); margin-right:6px"></i>
+                Exportar Dataset
+            </span>
+            <button class="modal-close" onclick="closeModal('modal-dl')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom:16px; padding:12px; background:rgba(212,255,0,0.04); border:1px solid rgba(212,255,0,0.15); border-radius:var(--r)">
+                <div class="text-mono text-faint" style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px">Resumen</div>
+                <div class="flex gap-4">
+                    <div>
+                        <div class="stat-label">Registros</div>
+                        <div style="font-family:var(--serif); font-size:24px; color:var(--acid)">@Model.TotalRegistros.ToString("N0")</div>
+                    </div>
+                    <div>
+                        <div class="stat-label">Columnas</div>
+                        <div style="font-family:var(--serif); font-size:24px; color:var(--chalk)">@Model.Columnas.Count</div>
+                    </div>
+                    <div>
+                        <div class="stat-label">Fuentes</div>
+                        <div style="font-family:var(--serif); font-size:24px; color:var(--chalk)">@Model.Fuentes.Count</div>
+                    </div>
+                </div>
+            </div>
 
-/* Textos visibles */
-.form-control::placeholder { color: #8888aa !important; opacity: 1; }
-.text-muted { color: #9999bb !important; }
-.card-header .text-muted { color: #9999bb !important; }
+            <div style="display:flex; flex-direction:column; gap:8px">
+                <a href="/descargar-datos?formato=csv"
+                   class="btn btn-ghost"
+                   style="justify-content:space-between; padding:14px 16px;"
+                   onclick="closeModal('modal-dl')">
+                    <div class="flex gap-3 items-center">
+                        <span class="tag tag-malachite">CSV</span>
+                        <div>
+                            <div style="font-size:12px; font-weight:500; color:var(--chalk)">Comma-Separated Values</div>
+                            <div style="font-size:10px; color:var(--chalk-faint); margin-top:2px">Excel · Python · R · análisis universal</div>
+                        </div>
+                    </div>
+                    <i class="bi bi-download" style="opacity:0.5"></i>
+                </a>
+                <a href="/descargar-datos?formato=excel"
+                   class="btn btn-ghost"
+                   style="justify-content:space-between; padding:14px 16px;"
+                   onclick="closeModal('modal-dl')">
+                    <div class="flex gap-3 items-center">
+                        <span class="tag tag-acid">XLSX</span>
+                        <div>
+                            <div style="font-size:12px; font-weight:500; color:var(--chalk)">Excel Workbook</div>
+                            <div style="font-size:10px; color:var(--chalk-faint); margin-top:2px">Microsoft Office · Google Sheets</div>
+                        </div>
+                    </div>
+                    <i class="bi bi-download" style="opacity:0.5"></i>
+                </a>
+                <a href="/descargar-estadisticas"
+                   class="btn btn-ghost"
+                   style="justify-content:space-between; padding:14px 16px;"
+                   onclick="closeModal('modal-dl')">
+                    <div class="flex gap-3 items-center">
+                        <span class="tag tag-sapphire">STATS</span>
+                        <div>
+                            <div style="font-size:12px; font-weight:500; color:var(--chalk)">Estadísticas por categoría</div>
+                            <div style="font-size:10px; color:var(--chalk-faint); margin-top:2px">Promedio · Máx · Mín · Total</div>
+                        </div>
+                    </div>
+                    <i class="bi bi-download" style="opacity:0.5"></i>
+                </a>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeModal('modal-dl')" class="btn btn-ghost btn-sm">Cerrar</button>
+        </div>
+    </div>
+</div>
 
-/* ── Separadores de columnas ── */
-.table-col-sep thead th {
-    border-right: 1px solid #3a3a58;
-    border-bottom: 2px solid var(--cyan) !important;
-}
-.table-col-sep thead th:last-child {
-    border-right: none;
-}
-.table-col-sep tbody td {
-    border-right: 1px solid #2a2a3c;
-}
-.table-col-sep tbody td:last-child {
-    border-right: none;
-}
-.table-col-sep tbody tr:hover td {
-    border-right-color: #3a3a58;
-}
-
-.btn-success {
-    background-color: #00e080 !important;
-    border-color: #00e080 !important;
-    color: #000 !important;
-    font-weight: 600;
-    animation: pulse-green 2s infinite;
-}
-.btn-success:hover {
-    background-color: #00cc70 !important;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,224,128,0.3);
-    animation: none;
-}
-@@keyframes pulse-green {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(0,224,128,0.7); }
-    50%       { box-shadow: 0 0 0 8px rgba(0,224,128,0); }
-}
-.btn-outline-success:hover { background-color: #00e080 !important; color: #000 !important; border-color: #00e080 !important; }
-.btn-outline-warning:hover { background-color: #ffc832 !important; color: #000 !important; border-color: #ffc832 !important; }
-.btn-outline-info:hover    { background-color: #00c8dc !important; color: #000 !important; border-color: #00c8dc !important; }
-
-table th, table td {
-    max-width: 280px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-</style>
-
+@section Scripts {
 <script>
-function descargarArchivo(event) {
-    event.preventDefault();
-    const url = event.currentTarget.getAttribute('href');
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = '';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    const modal = bootstrap.Modal.getInstance(document.getElementById('modalDescargar'));
-    if (modal) modal.hide();
+function openModal(id) {
+    document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
 }
 </script>
+}

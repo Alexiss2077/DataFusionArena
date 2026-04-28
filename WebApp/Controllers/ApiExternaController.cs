@@ -63,7 +63,7 @@ public class ApiExternaController : Controller
 
             items.AddRange(precip);
             Store.Agregar(items);
-            TempData["Ok"] = $"✅ {items.Count} registros de clima integrados al DataSet.";
+            TempData["Ok"] = $" {items.Count} registros de clima integrados al DataSet.";
         }
         else
         {
