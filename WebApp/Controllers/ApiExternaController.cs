@@ -10,9 +10,12 @@ public class ApiExternaController : Controller
 {
     private readonly IHttpClientFactory _http;
     private readonly SessionDataStore _sessionStore;
-    private const double Lat = 27.0619;
-    private const double Lon = -101.5489;
-    private const string Ciudad = "San Buenaventura, México";
+
+    // Top 50 monedas por capitalización de mercado
+    private const string CoinGeckoUrl =
+        "https://api.coingecko.com/api/v3/coins/markets" +
+        "?vs_currency=usd&order=market_cap_desc&per_page=50&page=1" +
+        "&sparkline=false&price_change_percentage=24h";
 
     public ApiExternaController(IHttpClientFactory http, SessionDataStore sessionStore)
     {
@@ -31,39 +34,38 @@ public class ApiExternaController : Controller
 
     public async Task<IActionResult> Index()
     {
-        var vm = await ObtenerClimaAsync();
+        var vm = await ObtenerCriptomonedasAsync();
         return View(vm);
     }
 
     [HttpPost]
     public async Task<IActionResult> IntegrarDatos()
     {
-        var vm = await ObtenerClimaAsync();
+        var vm = await ObtenerCriptomonedasAsync();
         if (!vm.ConError)
         {
-            var items = vm.Pronostico.Select((d, i) => new DataItem
+            var items = vm.Monedas.Select((m, i) => new DataItem
             {
-                Id = 90000 + i,
-                Nombre = $"Temp. {d.Fecha}",
-                Categoria = "Clima · Temperatura",
-                Valor = d.TempMax,
-                Fuente = "api-open-meteo",
-                Fecha = DateTime.TryParse(d.Fecha, out var dt) ? dt : DateTime.Now
+                Id = 92000 + i,
+                Nombre = m.Nombre,
+                Categoria = m.Categoria,
+                Valor = m.PrecioUsd,
+                Fuente = "api-coingecko",
+                Fecha = DateTime.UtcNow,
+                CamposExtra = new Dictionary<string, string>
+                {
+                    ["simbolo"] = m.Simbolo,
+                    ["cap_mercado_usd"] = m.CapMercado.ToString("F0"),
+                    ["cambio_24h_pct"] = m.Cambio24h.ToString("F2"),
+                    ["volumen_24h_usd"] = m.Volumen24h.ToString("F0"),
+                    ["maximo_24h"] = m.Maximo24h.ToString("F4"),
+                    ["minimo_24h"] = m.Minimo24h.ToString("F4"),
+                    ["ranking_cap_mercado"] = m.Ranking.ToString()
+                }
             }).ToList();
 
-            var precip = vm.Pronostico.Select((d, i) => new DataItem
-            {
-                Id = 91000 + i,
-                Nombre = $"Precipitación {d.Fecha}",
-                Categoria = "Clima · Precipitación",
-                Valor = d.Precipitacion,
-                Fuente = "api-open-meteo",
-                Fecha = DateTime.TryParse(d.Fecha, out var dt) ? dt : DateTime.Now
-            }).ToList();
-
-            items.AddRange(precip);
-            Store.Agregar(items);
-            TempData["Ok"] = $" {items.Count} registros de clima integrados al DataSet.";
+            Store.Agregar(items, "api-coingecko");
+            TempData["Ok"] = $"{items.Count} criptomonedas integradas al DataSet.";
         }
         else
         {
@@ -72,48 +74,39 @@ public class ApiExternaController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    private async Task<ClimaViewModel> ObtenerClimaAsync()
+    private async Task<CoinGeckoViewModel> ObtenerCriptomonedasAsync()
     {
-        var vm = new ClimaViewModel { Ciudad = Ciudad };
-        var url = $"https://api.open-meteo.com/v1/forecast?" +
-                  $"latitude={Lat}&longitude={Lon}" +
-                  $"&daily=temperature_2m_max,temperature_2m_min," +
-                  $"precipitation_sum,windspeed_10m_max" +
-                  $"&timezone=America%2FMonterrey&forecast_days=14";
+        var vm = new CoinGeckoViewModel();
         try
         {
             var client = _http.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(10);
-            var json = await client.GetStringAsync(url);
+            client.DefaultRequestHeaders.Add("User-Agent", "DataFusionArena/1.0");
+            client.Timeout = TimeSpan.FromSeconds(15);
+
+            var json = await client.GetStringAsync(CoinGeckoUrl);
             using var doc = JsonDocument.Parse(json);
-            var daily = doc.RootElement.GetProperty("daily");
 
-            var fechas = daily.GetProperty("time").EnumerateArray().Select(e => e.GetString()!).ToList();
-            var tMax = daily.GetProperty("temperature_2m_max").EnumerateArray().Select(e => e.GetDouble()).ToList();
-            var tMin = daily.GetProperty("temperature_2m_min").EnumerateArray().Select(e => e.GetDouble()).ToList();
-            var precip = daily.GetProperty("precipitation_sum").EnumerateArray()
-                              .Select(e => e.ValueKind == JsonValueKind.Null ? 0.0 : e.GetDouble()).ToList();
-            var viento = daily.GetProperty("windspeed_10m_max").EnumerateArray()
-                              .Select(e => e.ValueKind == JsonValueKind.Null ? 0.0 : e.GetDouble()).ToList();
-
-            for (int i = 0; i < fechas.Count; i++)
+            foreach (var coin in doc.RootElement.EnumerateArray())
             {
-                vm.Pronostico.Add(new DiaClima
+                vm.Monedas.Add(new MonedaInfo
                 {
-                    Fecha = fechas[i],
-                    TempMax = i < tMax.Count ? tMax[i] : 0,
-                    TempMin = i < tMin.Count ? tMin[i] : 0,
-                    Precipitacion = i < precip.Count ? precip[i] : 0,
-                    Viento = i < viento.Count ? viento[i] : 0,
-                    IconoClima = GetIcono(i < tMax.Count ? tMax[i] : 0, i < precip.Count ? precip[i] : 0)
+                    Id = coin.GetProperty("id").GetString() ?? "",
+                    Nombre = coin.GetProperty("name").GetString() ?? "",
+                    Simbolo = coin.GetProperty("symbol").GetString()?.ToUpper() ?? "",
+                    Categoria = ClasificarMoneda(
+                        coin.GetProperty("id").GetString() ?? "",
+                        coin.GetProperty("market_cap_rank").ValueKind != JsonValueKind.Null
+                            ? coin.GetProperty("market_cap_rank").GetInt32() : 99),
+                    PrecioUsd = GetDouble(coin, "current_price"),
+                    CapMercado = GetDouble(coin, "market_cap"),
+                    Cambio24h = GetDouble(coin, "price_change_percentage_24h"),
+                    Volumen24h = GetDouble(coin, "total_volume"),
+                    Maximo24h = GetDouble(coin, "high_24h"),
+                    Minimo24h = GetDouble(coin, "low_24h"),
+                    Ranking = coin.GetProperty("market_cap_rank").ValueKind != JsonValueKind.Null
+                                    ? coin.GetProperty("market_cap_rank").GetInt32() : 99
                 });
             }
-
-            vm.Fechas = fechas;
-            vm.TempMax = tMax;
-            vm.TempMin = tMin;
-            vm.Precipitacion = precip;
-            vm.Viento = viento;
         }
         catch (Exception ex)
         {
@@ -123,13 +116,19 @@ public class ApiExternaController : Controller
         return vm;
     }
 
-    private static string GetIcono(double tMax, double precip)
+    private static double GetDouble(JsonElement el, string prop)
     {
-        if (precip > 5) return "🌧";
-        if (precip > 0) return "🌦";
-        if (tMax > 35) return "🌡";
-        if (tMax > 28) return "☀";
-        if (tMax > 20) return "🌤";
-        return "⛅";
+        if (!el.TryGetProperty(prop, out var p)) return 0;
+        if (p.ValueKind == JsonValueKind.Null) return 0;
+        return p.TryGetDouble(out double v) ? v : 0;
+    }
+
+    private static string ClasificarMoneda(string id, int ranking)
+    {
+        if (ranking <= 5) return "Large Cap";
+        if (ranking <= 20) return "Mid Cap";
+        if (id is "tether" or "usd-coin" or "dai" or "binance-usd" or "true-usd" or "frax")
+            return "Stablecoin";
+        return "Small Cap";
     }
 }

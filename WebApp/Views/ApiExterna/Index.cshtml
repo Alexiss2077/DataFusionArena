@@ -1,20 +1,26 @@
-@model ClimaViewModel
+@model CoinGeckoViewModel
 @using System.Text.Json
 @{
-    ViewData["Title"] = "API Clima";
-    var fechasJson  = JsonSerializer.Serialize(Model.Fechas);
-    var tmaxJson    = JsonSerializer.Serialize(Model.TempMax);
-    var tminJson    = JsonSerializer.Serialize(Model.TempMin);
-    var precipJson  = JsonSerializer.Serialize(Model.Precipitacion);
-    var vientoJson  = JsonSerializer.Serialize(Model.Viento);
+    ViewData["Title"] = "API CoinGecko";
+
+    var categorias = Model.Monedas.GroupBy(m => m.Categoria)
+        .Select(g => new { Cat = g.Key, Count = g.Count(), AvgPrice = g.Average(x => x.PrecioUsd) })
+        .OrderByDescending(x => x.Count).ToList();
+
+    var labelsJson  = JsonSerializer.Serialize(Model.Monedas.Take(15).Select(m => m.Simbolo).ToList());
+    var preciosJson = JsonSerializer.Serialize(Model.Monedas.Take(15).Select(m => m.PrecioUsd).ToList());
+    var cambiosJson = JsonSerializer.Serialize(Model.Monedas.Take(20).Select(m => m.Cambio24h).ToList());
+    var cambiosLbl  = JsonSerializer.Serialize(Model.Monedas.Take(20).Select(m => m.Simbolo).ToList());
+    var catLabels   = JsonSerializer.Serialize(categorias.Select(c => c.Cat).ToList());
+    var catCounts   = JsonSerializer.Serialize(categorias.Select(c => c.Count).ToList());
 }
 
-<!-- ─── PAGE TITLE ─────────────────────────────────────────── -->
 <div class="page-title">
     <div>
-        <h1 class="section-heading">API <em style="color:var(--acid)">climática</em></h1>
+        <h1 class="section-heading">API <em style="color:var(--acid)">CoinGecko</em></h1>
         <p class="section-sub">
-            Open-Meteo · <span style="color:var(--acid)">@Model.Ciudad</span> · Pronóstico 14 días · Sin API key
+            Top 50 criptomonedas · Precios en USD · Sin API key ·
+            <span style="color:var(--acid)">@Model.Monedas.Count</span> monedas cargadas
         </p>
     </div>
     <form asp-action="IntegrarDatos" method="post">
@@ -25,107 +31,96 @@
     </form>
 </div>
 
-<!-- ─── INFO BAR ──────────────────────────────────────────── -->
+<!-- INFO BAR -->
 <div class="card mb-4" style="border-color:rgba(212,255,0,0.15)">
-    <div class="card-body" style="display:flex; gap:16px; align-items:flex-start; padding:14px 16px">
-        <div style="color:var(--acid); font-size:16px; flex-shrink:0; margin-top:2px">
+    <div class="card-body" style="display:flex;gap:16px;align-items:flex-start;padding:14px 16px">
+        <div style="color:var(--acid);font-size:16px;flex-shrink:0;margin-top:2px">
             <i class="bi bi-broadcast"></i>
         </div>
         <div style="flex:1">
-            <div style="font-family:var(--mono); font-size:11px; font-weight:500; color:var(--chalk); margin-bottom:4px">
-                Bonus — API REST Externa
+            <div style="font-family:var(--mono);font-size:11px;font-weight:500;color:var(--chalk);margin-bottom:4px">
+                Bonus — API REST Externa · CoinGecko
             </div>
-            <div style="font-family:var(--mono); font-size:10px; color:var(--chalk-faint); line-height:1.8">
-                Esta sección consume
-                <a href="https://open-meteo.com" target="_blank" style="color:var(--acid)">api.open-meteo.com</a>
-                en tiempo real. Los datos se transforman al modelo <code style="color:var(--sapphire)">DataItem</code>
-                y pueden integrarse al dataset para análisis conjunto con archivos y bases de datos.
+            <div style="font-family:var(--mono);font-size:10px;color:var(--chalk-faint);line-height:1.8">
+                Consume
+                <a href="https://api.coingecko.com" target="_blank" style="color:var(--acid)">api.coingecko.com</a>
+                en tiempo real. Los datos se mapean al modelo
+                <code style="color:var(--sapphire)">DataItem</code>:
+                nombre = moneda · categoría = cap. de mercado · valor = precio USD ·
+                campos extra = volumen, cambio 24h, máx/mín.
             </div>
         </div>
-        <div style="flex-shrink:0; font-family:var(--mono); font-size:9px; color:var(--chalk-faint); text-align:right; line-height:2">
-            <div style="color:var(--chalk-dim); margin-bottom:2px">ENDPOINT</div>
-            <code style="font-size:9px; color:var(--sapphire)">api.open-meteo.com/v1/forecast</code>
+        <div style="flex-shrink:0;font-family:var(--mono);font-size:9px;color:var(--chalk-faint);text-align:right;line-height:2">
+            <div style="color:var(--chalk-dim);margin-bottom:2px">ENDPOINT</div>
+            <code style="font-size:9px;color:var(--sapphire)">/api/v3/coins/markets</code>
         </div>
     </div>
 </div>
 
 @if (Model.ConError)
 {
-    <div class="card mb-4" style="border-color:rgba(255,61,107,0.3); background:rgba(255,61,107,0.04)">
-        <div class="card-body" style="display:flex; gap:12px; align-items:center; padding:14px 16px">
-            <i class="bi bi-exclamation-triangle" style="color:var(--rose); font-size:16px; flex-shrink:0"></i>
+    <div class="card mb-4" style="border-color:rgba(255,61,107,0.3);background:rgba(255,61,107,0.04)">
+        <div class="card-body" style="display:flex;gap:12px;align-items:center;padding:14px 16px">
+            <i class="bi bi-exclamation-triangle" style="color:var(--rose);font-size:16px;flex-shrink:0"></i>
             <div>
-                <div style="font-family:var(--mono); font-size:11px; font-weight:500; color:var(--rose)">Error de conexión</div>
-                <div style="font-family:var(--mono); font-size:10px; color:var(--chalk-faint); margin-top:2px">@Model.MensajeError</div>
+                <div style="font-family:var(--mono);font-size:11px;font-weight:500;color:var(--rose)">Error de conexión</div>
+                <div style="font-family:var(--mono);font-size:10px;color:var(--chalk-faint);margin-top:2px">@Model.MensajeError</div>
             </div>
         </div>
     </div>
 }
 else
 {
-    <!-- ─── WEATHER CARDS ─────────────────────────────────────── -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <div class="card-title">
-                <span class="card-title-accent" style="background:var(--copper)"></span>
-                Pronóstico — @Model.Ciudad
-            </div>
-            <span class="tag tag-dim" style="font-size:9px">14 días</span>
+    <!-- STAT STRIP -->
+    <div class="stat-grid mb-4">
+        <div class="stat-cell">
+            <span class="stat-label">Monedas</span>
+            <span class="stat-value stat-value-acid">@Model.Monedas.Count</span>
+            <span class="stat-detail">Top por cap. de mercado</span>
         </div>
-
-        <div style="overflow-x:auto; padding:16px">
-            <div style="display:flex; gap:8px; min-width:max-content">
-                @foreach (var dia in Model.Pronostico)
-                {
-                    bool rain = dia.Precipitacion > 5;
-                    bool hot  = dia.TempMax > 35;
-                    <div style="width:90px; background:var(--ink-3); border:1px solid var(--ink-5); border-radius:var(--r-lg); padding:12px 8px; text-align:center; flex-shrink:0; transition:border-color 0.15s"
-                         onmouseover="this.style.borderColor='var(--acid)'"
-                         onmouseout="this.style.borderColor='var(--ink-5)'">
-                        <div style="font-family:var(--mono); font-size:8px; color:var(--chalk-faint); margin-bottom:6px; letter-spacing:0.05em">
-                            @dia.Fecha.Substring(5)
-                        </div>
-                        <div style="font-size:20px; margin-bottom:8px; line-height:1">@dia.IconoClima</div>
-                        <div style="font-family:var(--mono); font-size:14px; font-weight:600; color:@(hot ? "var(--copper)" : "var(--chalk)"); margin-bottom:2px">
-                            @dia.TempMax.ToString("F0")°
-                        </div>
-                        <div style="font-family:var(--mono); font-size:11px; color:var(--sapphire)">
-                            @dia.TempMin.ToString("F0")°
-                        </div>
-                        @if (dia.Precipitacion > 0)
-                        {
-                            <div style="font-family:var(--mono); font-size:9px; color:@(rain ? "var(--sapphire)" : "var(--chalk-faint)"); margin-top:6px">
-                                @dia.Precipitacion.ToString("F1")mm
-                            </div>
-                        }
-                    </div>
-                }
-            </div>
+        <div class="stat-cell">
+            <span class="stat-label">Mayor precio</span>
+            <span class="stat-value">$@Model.Monedas.OrderByDescending(m => m.PrecioUsd).First().PrecioUsd.ToString("N2")</span>
+            <span class="stat-detail">@Model.Monedas.OrderByDescending(m => m.PrecioUsd).First().Simbolo</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-label">Mayor alza 24h</span>
+            <span class="stat-value" style="color:var(--malachite)">
+                +@Model.Monedas.OrderByDescending(m => m.Cambio24h).First().Cambio24h.ToString("F2")%
+            </span>
+            <span class="stat-detail">@Model.Monedas.OrderByDescending(m => m.Cambio24h).First().Simbolo</span>
+        </div>
+        <div class="stat-cell">
+            <span class="stat-label">Mayor caída 24h</span>
+            <span class="stat-value" style="color:var(--rose)">
+                @Model.Monedas.OrderBy(m => m.Cambio24h).First().Cambio24h.ToString("F2")%
+            </span>
+            <span class="stat-detail">@Model.Monedas.OrderBy(m => m.Cambio24h).First().Simbolo</span>
         </div>
     </div>
 
-    <!-- ─── CHARTS ────────────────────────────────────────────── -->
+    <!-- CHARTS -->
     <div class="grid grid-2 mb-4" style="grid-template-columns:2fr 1fr">
         <div class="card">
             <div class="card-header">
                 <div class="card-title">
-                    <span class="card-title-accent" style="background:var(--copper)"></span>
-                    Temperatura Máx / Mín (°C)
+                    <span class="card-title-accent"></span>
+                    Precio USD — Top 15
                 </div>
             </div>
-            <div class="chart-wrap" style="height:260px">
-                <canvas id="chartTemp"></canvas>
+            <div class="chart-wrap" style="height:280px">
+                <canvas id="chartPrecios"></canvas>
             </div>
         </div>
         <div class="card">
             <div class="card-header">
                 <div class="card-title">
-                    <span class="card-title-accent" style="background:var(--sapphire)"></span>
-                    Precipitación (mm)
+                    <span class="card-title-accent" style="background:var(--copper)"></span>
+                    Por categoría
                 </div>
             </div>
-            <div class="chart-wrap" style="height:260px">
-                <canvas id="chartPrecip"></canvas>
+            <div class="chart-wrap" style="height:260px;display:flex;align-items:center;justify-content:center">
+                <canvas id="chartCategorias"></canvas>
             </div>
         </div>
     </div>
@@ -134,50 +129,53 @@ else
         <div class="card-header">
             <div class="card-title">
                 <span class="card-title-accent" style="background:var(--malachite)"></span>
-                Velocidad del Viento (km/h)
+                Cambio % 24h — Top 20
             </div>
         </div>
-        <div class="chart-wrap" style="height:180px">
-            <canvas id="chartViento"></canvas>
+        <div class="chart-wrap" style="height:200px">
+            <canvas id="chartCambios"></canvas>
         </div>
     </div>
 
-    <!-- ─── DATA TABLE ────────────────────────────────────────── -->
+    <!-- TABLE -->
     <div class="card">
         <div class="card-header">
             <div class="card-title">
-                <span class="card-title-accent" style="background:var(--chalk-faint)"></span>
+                <span class="card-title-accent" style="background:var(--sapphire)"></span>
                 Datos detallados
             </div>
+            <span class="tag tag-dim" style="font-size:9px">Top 50</span>
         </div>
-        <div class="table-scroll" style="max-height:360px">
+        <div class="table-scroll" style="max-height:480px">
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th></th>
-                        <th>Fecha</th>
-                        <th style="text-align:right">T. Máx (°C)</th>
-                        <th style="text-align:right">T. Mín (°C)</th>
-                        <th style="text-align:right">Precipit. (mm)</th>
-                        <th style="text-align:right">Viento (km/h)</th>
+                        <th>#</th>
+                        <th>Moneda</th>
+                        <th>Símbolo</th>
+                        <th>Categoría</th>
+                        <th style="text-align:right">Precio USD</th>
+                        <th style="text-align:right">Cambio 24h</th>
+                        <th style="text-align:right">Cap. Mercado</th>
+                        <th style="text-align:right">Volumen 24h</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var dia in Model.Pronostico)
+                    @foreach (var m in Model.Monedas)
                     {
+                        string cambioColor = m.Cambio24h >= 0 ? "var(--malachite)" : "var(--rose)";
+                        string cambioSign  = m.Cambio24h >= 0 ? "+" : "";
                         <tr>
-                            <td style="font-size:16px; line-height:1; padding:8px 12px">@dia.IconoClima</td>
-                            <td style="font-weight:500">@dia.Fecha</td>
-                            <td style="text-align:right; color:@(dia.TempMax > 35 ? "var(--copper)" : "var(--chalk)")">
-                                @dia.TempMax.ToString("F1")°
+                            <td style="color:var(--chalk-faint)">@m.Ranking</td>
+                            <td style="font-weight:500">@m.Nombre</td>
+                            <td><span class="tag tag-dim" style="font-size:9px">@m.Simbolo</span></td>
+                            <td><span class="tag tag-sapphire" style="font-size:9px">@m.Categoria</span></td>
+                            <td class="val-cell">$@m.PrecioUsd.ToString("N4")</td>
+                            <td style="text-align:right;color:@cambioColor;font-family:var(--mono);font-size:11px">
+                                @cambioSign@m.Cambio24h.ToString("F2")%
                             </td>
-                            <td style="text-align:right; color:var(--sapphire)">
-                                @dia.TempMin.ToString("F1")°
-                            </td>
-                            <td style="text-align:right; color:@(dia.Precipitacion > 5 ? "var(--sapphire)" : "var(--chalk-faint)")">
-                                @dia.Precipitacion.ToString("F1")
-                            </td>
-                            <td class="num-cell">@dia.Viento.ToString("F0")</td>
+                            <td class="num-cell">$@(m.CapMercado / 1_000_000_000).ToString("F2")B</td>
+                            <td class="num-cell">$@(m.Volumen24h  / 1_000_000_000).ToString("F2")B</td>
                         </tr>
                     }
                 </tbody>
@@ -185,25 +183,29 @@ else
         </div>
     </div>
 
-    <!-- ─── ENDPOINT CODE ────────────────────────────────────── -->
+    <!-- ENDPOINT -->
     <div class="card mt-4">
         <div class="card-header">
             <div class="card-title">
                 <span class="card-title-accent" style="background:var(--malachite)"></span>
-                Respuesta JSON — Open-Meteo
+                Respuesta JSON — CoinGecko
             </div>
             <span class="tag tag-malachite" style="font-size:9px">live</span>
         </div>
         <div class="card-body" style="padding:0">
-            <pre style="border:none; border-radius:0; margin:0; max-height:200px; overflow-y:auto; font-size:10px">{
-  "daily": {
-    "time":               ["@(Model.Fechas.FirstOrDefault())", "@(Model.Fechas.Skip(1).FirstOrDefault())", "..."],
-    "temperature_2m_max": [@(Model.TempMax.FirstOrDefault().ToString("F1")), @(Model.TempMax.Skip(1).FirstOrDefault().ToString("F1")), ...],
-    "temperature_2m_min": [@(Model.TempMin.FirstOrDefault().ToString("F1")), @(Model.TempMin.Skip(1).FirstOrDefault().ToString("F1")), ...],
-    "precipitation_sum":  [@(Model.Precipitacion.FirstOrDefault().ToString("F1")), ...],
-    "windspeed_10m_max":  [@(Model.Viento.FirstOrDefault().ToString("F0")), ...]
-  }
-}</pre>
+            <pre style="border:none;border-radius:0;margin:0;max-height:180px;overflow-y:auto;font-size:10px">[
+  {
+    "id":                          "@Model.Monedas.FirstOrDefault()?.Id",
+    "name":                        "@Model.Monedas.FirstOrDefault()?.Nombre",
+    "symbol":                      "@Model.Monedas.FirstOrDefault()?.Simbolo?.ToLower()",
+    "current_price":               @Model.Monedas.FirstOrDefault()?.PrecioUsd.ToString("F2"),
+    "market_cap":                  @Model.Monedas.FirstOrDefault()?.CapMercado.ToString("F0"),
+    "price_change_percentage_24h": @Model.Monedas.FirstOrDefault()?.Cambio24h.ToString("F4"),
+    "total_volume":                @Model.Monedas.FirstOrDefault()?.Volumen24h.ToString("F0"),
+    "high_24h":                    @Model.Monedas.FirstOrDefault()?.Maximo24h.ToString("F2"),
+    "low_24h":                     @Model.Monedas.FirstOrDefault()?.Minimo24h.ToString("F2")
+  }, ...
+]</pre>
         </div>
     </div>
 }
@@ -212,78 +214,85 @@ else
 <script>
 const GRID = 'rgba(255,255,255,0.05)';
 const tip = {
-    backgroundColor: '#1a1a26', borderColor: '#32324a', borderWidth: 1,
-    borderRadius: 4, padding: 10,
-    titleColor: '#d4ff00',
-    titleFont: { family: "'JetBrains Mono'", size: 10, weight: '500' },
-    bodyColor: '#e8e8f0',
-    bodyFont: { family: "'JetBrains Mono'", size: 10 }
+    backgroundColor:'#1a1a26',borderColor:'#32324a',borderWidth:1,
+    borderRadius:4,padding:10,
+    titleColor:'#d4ff00',titleFont:{family:"'JetBrains Mono'",size:10,weight:'500'},
+    bodyColor:'#e8e8f0',bodyFont:{family:"'JetBrains Mono'",size:10}
 };
-const scaleX = {
-    grid: { color: GRID }, ticks: { font: { family:"'JetBrains Mono'", size:9 }, color:'#9090a8', maxRotation:45 }
-};
-const scaleY = (cb) => ({
-    grid: { color: GRID }, ticks: { font: { family:"'JetBrains Mono'", size:9 }, color:'#9090a8', callback: cb || (v => v) }
-});
+const scaleX = { grid:{color:GRID}, ticks:{font:{family:"'JetBrains Mono'",size:9},color:'#9090a8',maxRotation:45} };
 
-new Chart(document.getElementById('chartTemp'), {
-    type: 'line',
-    data: {
-        labels: @Html.Raw(fechasJson),
-        datasets: [
-            {
-                label: 'T. Máx', data: @Html.Raw(tmaxJson),
-                borderColor:'#ff6b35', backgroundColor:'rgba(255,107,53,0.08)',
-                fill:false, tension:0.4, pointRadius:4,
-                pointBackgroundColor:'#ff6b35', pointBorderColor:'#0a0a0f', pointBorderWidth:2
-            },
-            {
-                label: 'T. Mín', data: @Html.Raw(tminJson),
-                borderColor:'#3d8bff', backgroundColor:'rgba(61,139,255,0.08)',
-                fill:false, tension:0.4, pointRadius:4,
-                pointBackgroundColor:'#3d8bff', pointBorderColor:'#0a0a0f', pointBorderWidth:2
+new Chart(document.getElementById('chartPrecios'), {
+    type:'bar',
+    data:{
+        labels: @Html.Raw(labelsJson),
+        datasets:[{
+            label:'Precio USD',
+            data: @Html.Raw(preciosJson),
+            backgroundColor:'rgba(212,255,0,0.15)',
+            borderColor:'#d4ff00',
+            borderWidth:1,borderRadius:2
+        }]
+    },
+    options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:tip},
+        scales:{
+            x:scaleX,
+            y:{
+                grid:{color:GRID},
+                ticks:{
+                    font:{family:"'JetBrains Mono'",size:9},color:'#9090a8',
+                    callback:v => v>=1000 ? '$'+(v/1000).toFixed(0)+'K' : '$'+v
+                }
             }
-        ]
-    },
-    options: {
-        responsive:true, maintainAspectRatio:false,
-        plugins: { tooltip:tip, legend:{ labels:{ font:{family:"'JetBrains Mono'",size:9}, color:'#9090a8', boxWidth:10, usePointStyle:true } } },
-        scales: { x:scaleX, y:scaleY(v => v+'°C') }
+        }
     }
 });
 
-new Chart(document.getElementById('chartPrecip'), {
-    type: 'bar',
-    data: {
-        labels: @Html.Raw(fechasJson),
-        datasets: [{
-            label: 'mm', data: @Html.Raw(precipJson),
-            backgroundColor: 'rgba(61,139,255,0.25)', borderColor:'#3d8bff',
-            borderWidth:1, borderRadius:2
+new Chart(document.getElementById('chartCategorias'), {
+    type:'doughnut',
+    data:{
+        labels: @Html.Raw(catLabels),
+        datasets:[{
+            data: @Html.Raw(catCounts),
+            backgroundColor:['rgba(212,255,0,0.25)','rgba(61,139,255,0.25)','rgba(0,212,138,0.25)','rgba(255,107,53,0.25)'],
+            borderColor:['#d4ff00','#3d8bff','#00d48a','#ff6b35'],
+            borderWidth:1
         }]
     },
-    options: {
-        responsive:true, maintainAspectRatio:false,
-        plugins: { legend:{ display:false }, tooltip:tip },
-        scales: { x:scaleX, y:scaleY(v => v+' mm') }
+    options:{
+        responsive:true,maintainAspectRatio:false,cutout:'65%',
+        plugins:{
+            legend:{position:'bottom',labels:{font:{family:"'JetBrains Mono'",size:9},color:'#9090a8',padding:10,boxWidth:10,usePointStyle:true}},
+            tooltip:tip
+        }
     }
 });
 
-new Chart(document.getElementById('chartViento'), {
-    type: 'line',
-    data: {
-        labels: @Html.Raw(fechasJson),
-        datasets: [{
-            label: 'km/h', data: @Html.Raw(vientoJson),
-            borderColor:'#00d48a', backgroundColor:'rgba(0,212,138,0.08)',
-            fill:true, tension:0.4, pointRadius:3,
-            pointBackgroundColor:'#00d48a', pointBorderColor:'#0a0a0f', pointBorderWidth:2
+const cambioData  = @Html.Raw(cambiosJson);
+const cambioLbls  = @Html.Raw(cambiosLbl);
+new Chart(document.getElementById('chartCambios'), {
+    type:'bar',
+    data:{
+        labels:cambioLbls,
+        datasets:[{
+            label:'Cambio 24h %',
+            data:cambioData,
+            backgroundColor:cambioData.map(v => v>=0 ? 'rgba(0,212,138,0.25)' : 'rgba(255,61,107,0.25)'),
+            borderColor:cambioData.map(v => v>=0 ? '#00d48a' : '#ff3d6b'),
+            borderWidth:1,borderRadius:2
         }]
     },
-    options: {
-        responsive:true, maintainAspectRatio:false,
-        plugins: { legend:{ display:false }, tooltip:tip },
-        scales: { x:scaleX, y:scaleY(v => v+' km/h') }
+    options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:tip},
+        scales:{
+            x:scaleX,
+            y:{
+                grid:{color:GRID},
+                ticks:{font:{family:"'JetBrains Mono'",size:9},color:'#9090a8',callback:v=>v+'%'}
+            }
+        }
     }
 });
 </script>

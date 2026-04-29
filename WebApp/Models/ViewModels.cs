@@ -13,8 +13,6 @@ public class HomeViewModel
     public string Campo { get; set; } = "nombre";
     public List<string> Fuentes { get; set; } = new();
     public string FuenteActiva { get; set; } = "";
-
-    // Columnas dinámicas del dataset
     public List<string> Columnas { get; set; } = new();
     public Dictionary<string, string> Mapeo { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string FuenteDatos { get; set; } = "";
@@ -31,25 +29,25 @@ public class GraficasViewModel
     public int TotalItems { get; set; }
 }
 
-public class ClimaViewModel
+// ── CoinGecko ────────────────────────────────────────────────
+public class CoinGeckoViewModel
 {
-    public string Ciudad { get; set; } = "San Buenaventura, México";
-    public List<DiaClima> Pronostico { get; set; } = new();
+    public List<MonedaInfo> Monedas { get; set; } = new();
     public bool ConError { get; set; }
     public string MensajeError { get; set; } = "";
-    public List<string> Fechas { get; set; } = new();
-    public List<double> TempMax { get; set; } = new();
-    public List<double> TempMin { get; set; } = new();
-    public List<double> Precipitacion { get; set; } = new();
-    public List<double> Viento { get; set; } = new();
 }
 
-public class DiaClima
+public class MonedaInfo
 {
-    public string Fecha { get; set; } = "";
-    public double TempMax { get; set; }
-    public double TempMin { get; set; }
-    public double Precipitacion { get; set; }
-    public double Viento { get; set; }
-    public string IconoClima { get; set; } = "🌤";
+    public string Id { get; set; } = "";
+    public string Nombre { get; set; } = "";
+    public string Simbolo { get; set; } = "";
+    public string Categoria { get; set; } = "";
+    public double PrecioUsd { get; set; }
+    public double CapMercado { get; set; }
+    public double Cambio24h { get; set; }
+    public double Volumen24h { get; set; }
+    public double Maximo24h { get; set; }
+    public double Minimo24h { get; set; }
+    public int Ranking { get; set; }
 }
