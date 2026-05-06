@@ -647,15 +647,24 @@ public partial class MainForm : Form
     // ══════════════════════════════════════════════════════════════
     //  FILTER / SORT
     // ══════════════════════════════════════════════════════════════
-
+   
     private async void BtnFiltrar_Click(object? sender, EventArgs e)
     {
-        string display = cmbCampoBusqueda.Text, clave = TraducirClave(display),
-               valor = txtBusqueda.Text.Trim();
-        ActualizarEstadoBarra("Filtrando...");
+        // Si no hay datos, no hacer nada
+        if (_datos.Count == 0)
+        {
+            ActualizarEstadoBarra("Sin datos cargados.");
+            return;
+        }
+
+        string display = cmbCampoBusqueda.Text;
+        string clave = TraducirClave(display);
+        string valor = txtBusqueda.Text.Trim();
+
         _datosVista = string.IsNullOrEmpty(valor)
             ? new List<DataItem>(_datosBase)
             : await Task.Run(() => DataProcessor.Filtrar(_datosBase, clave, valor));
+
         await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
         ActualizarEstadoBarra($"Filtro '{display}' = '{valor}' → {_datosVista.Count} resultados.");
     }
@@ -663,6 +672,17 @@ public partial class MainForm : Form
     private async void BtnLimpiarFiltro_Click(object? sender, EventArgs e)
     {
         txtBusqueda.Text = "";
+
+        // Si no hay datos, limpiar el grid completamente y salir
+        if (_datos.Count == 0)
+        {
+            dgvTodos.DataSource = null;
+            dgvTodos.Columns.Clear();
+            lblContadorTodos.Text = "0 registros";
+            ActualizarEstadoBarra("Sin datos cargados.");
+            return;
+        }
+
         _datosVista = new List<DataItem>(_datosBase);
         await BindGridAsync(dgvTodos, _datosVista, lblContadorTodos);
         ActualizarEstadoBarra($"Filtro limpiado — {_datosVista.Count} registros.");
